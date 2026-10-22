@@ -1,0 +1,17 @@
+# Agent config for jenkins-win (Windows Server 2022). Install as
+# C:\ProgramData\mp-infra\agent.yaml (SYSTEM + Administrators only).
+host: jenkins-win
+server_url: "http://TAILNET_IP_OF_SERVE:8099"
+token: "PASTE_TOKEN_FROM_mpinfra_token"
+
+disks: ['C:\']
+security_updates: windows
+windows:
+  tailscale_service: Tailscale
+  firewall_allow: []     # rule Names (not display names) accepted with RemoteAddress Any
+auth_failures:
+  sources:
+    - name: rdp
+      cmd: ["powershell.exe", "-NoProfile", "-Command",
+            "Get-WinEvent -FilterHashtable @{LogName='Security';Id=4625;StartTime=(Get-Date).AddDays(-1)} -ErrorAction SilentlyContinue | ForEach-Object { $_.Properties[19].Value }"]
+      pattern: '^(?P<ip>[0-9a-fA-F.:]+)\s*$'

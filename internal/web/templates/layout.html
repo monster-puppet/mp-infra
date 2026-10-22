@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+{{if .Refresh}}<meta http-equiv="refresh" content="60">{{end}}
+<title>{{.Title}} · mp-infra</title>
+<link rel="icon" type="image/png" href="/static/images/favicon.png">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <a href="/" class="nav-brand"><img src="/static/images/logo-small.png" alt="Monster Puppet" width="88" height="42"></a>
+  <div class="nav-links">
+    <a href="/" {{if eq .Section "home"}}class="active"{{end}} title="Status">
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span class="nav-label">Status</span>
+    </a>
+    <a href="/history" {{if eq .Section "history"}}class="active"{{end}} title="History">
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span class="nav-label">History</span>
+    </a>
+  </div>
+  <div class="nav-user" title="Tailscale identity">{{.Viewer}}</div>
+</nav>
+<main class="container">
+{{template "content" .}}
+</main>
+<footer class="footer">mp-infra {{.Version}} · read-only · tailnet only</footer>
+</body>
+</html>
+{{define "badge"}}<span class="badge badge-{{.}}">{{.}}</span>{{end}}
+{{define "transitions"}}
+{{if .}}
+<div class="table-scroll">
+<table class="report-table">
+  <thead><tr><th>When</th><th>Check</th><th>Change</th><th>Summary</th></tr></thead>
+  <tbody>
+  {{range .}}
+    <tr>
+      <td class="nowrap">{{date .At}}</td>
+      <td><a href="{{checkURL .Host .CheckID}}">{{.Host}} · {{.CheckID}}</a></td>
+      <td class="nowrap">{{if .OldState}}{{template "badge" .OldState}}{{else}}<span class="badge badge-new">new</span>{{end}} → {{template "badge" .NewState}}</td>
+      <td>{{.Summary}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<p class="empty">No transitions yet.</p>
+{{end}}
+{{end}}

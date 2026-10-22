@@ -1,10 +1,13 @@
 # Example server config. The real file is /etc/mp-infra/config.yaml and is never committed.
-# Secrets are referenced by env var name only (*_env keys).
+# Secrets are referenced by env var name only (*_env keys). Every threshold below is
+# optional; the values shown are the defaults from docs/spec.md.
 
 ui_addr: "TAILNET_IP:8098"      # UI, members only
 report_addr: "TAILNET_IP:8099"  # report API, all reporting hosts
 db: /var/lib/mp-infra/mpinfra.db
 stale_after: 15m
+probe_interval: 5m
+base_url: "http://TAILNET_IP:8098"   # for links in alerts
 
 hosts:
   - name: monster-p4
@@ -16,6 +19,27 @@ hosts:
   - name: jenkins-win
     public_ip: "PUBLIC_IP"
     expected_public_ports: []
+  # Phase 3. Until it joins the tailnet:
+  # - name: p4-game
+  #   public_ip: "PUBLIC_IP"
+  #   expected_public_ports: [22, 1666]
+  #   not_on_tailnet: true
+
+# Ports connect-scanned on every public_ip, plus each host's expected ports.
+# scan_ports: [21, 22, 23, 25, 53, 80, 443, 1666, 3389, 5985, 8080, 50000, 50001]
+
+thresholds:
+  ts_online_warn: 5m
+  ts_online_crit: 15m
+  ts_key_expiry_days: 14
+  ts_device_unseen_days: 30
+  jenkins_offline_grace: 5m
+  breakglass_max_age: 840h      # 35 days
+  tls_warn_days: 21
+  tls_crit_days: 7
+  snapshot_warn_days: 35
+  snapshot_crit_days: 60
+  updates_crit_age: 336h        # 14 days
 
 tls:
   - name: code-review
@@ -23,20 +47,59 @@ tls:
   - name: jenkins
     url: "https://JENKINS_HOST/"
 
+dns:
+  - name: jenkins
+    host: "JENKINS_HOST"
+    expected: ["PUBLIC_IP"]
+
+http:
+  - name: code-review
+    url: "https://CODE_REVIEW_HOST/"
+
+tcp:
+  - name: p4
+    addr: "TAILNET_IP_OF_MONSTER_P4:1666"
+
 tailscale:
   client_id_env: MPINFRA_TS_CLIENT_ID
   client_secret_env: MPINFRA_TS_CLIENT_SECRET
+  tailnet: "-"
+  devices:                       # host name -> Tailscale device hostname, when they differ
+    jenkins-win: "WINDOWS_DEVICE_HOSTNAME"
+  expected_devices: []           # laptops, phones: anything else shows in ts.devices
 
 jenkins:
   url: "https://JENKINS_HOST/"
   user: mpinfra
   token_env: MPINFRA_JENKINS_TOKEN
   agents: [windows]
+  agent_hosts:
+    windows: jenkins-win
   breakglass_job: break-glass-windows-tailscale
+  breakglass_host: jenkins-win
+  breakglass_monthly: true       # starts an ACTION=status build when the last success is 28 days old
+
+digitalocean:
+  token_env: MPINFRA_DO_TOKEN
+  droplets:
+    - name: monster-p4
+      id: 0                      # droplet id
+    - name: jenkins
+      id: 0
+
+notion:
+  token_env: MPINFRA_NOTION_TOKEN
+  database_id: "OPSEC_DATABASE_ID"
+  done_property: "Done"
 
 alerts:
   slack_webhook_env: MPINFRA_SLACK_WEBHOOK
+  smtp_host: "SMTP_HOST"
+  smtp_port: 587
+  smtp_user: "SMTP_USER"
   smtp_password_env: MPINFRA_SMTP_PASSWORD
+  mail_from: "mpinfra@EXAMPLE_DOMAIN"
+  mail_to: ["ALERT_ADDRESS"]
   deadman_url_env: MPINFRA_DEADMAN_URL
   crit_reminder: 12h
   digest_at: "08:00"

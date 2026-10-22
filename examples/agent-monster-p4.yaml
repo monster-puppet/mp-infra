@@ -1,0 +1,43 @@
+# Agent config for monster-p4 (Rocky 8, SDP). Install as /etc/mp-infra/agent.yaml, mode 0600.
+host: monster-p4
+server_url: "http://TAILNET_IP_OF_SERVE:8099"
+token: "PASTE_TOKEN_FROM_mpinfra_token"   # or token_env: SOME_VAR
+
+disks: ["/", "/p4"]
+disk_warn_pct: 80
+disk_crit_pct: 90
+
+checkpoint:
+  path: /p4/1/logs/checkpoint.log
+  max_age: 26h
+
+offline_db:
+  path: /p4/1/offline_db
+  max_age: 26h
+
+p4_license:
+  cmd: ["/p4/common/bin/p4", "-p", "P4PORT", "-u", "perforce", "-ztag", "license", "-u"]
+  env:
+    P4TICKETS: /p4/1/.p4tickets
+    P4TRUST: /p4/1/.p4trust
+
+firewall:
+  cmd: ["firewall-cmd", "--list-all"]
+
+security_updates: dnf
+
+versions:
+  - name: p4d
+    cmd: ["/p4/common/bin/p4d_1", "-V"]
+    pattern: 'Rev\. P4D/[^/]+/(\d{4}\.\d)/'
+    min: "MIN_P4D_VERSION"
+  - name: php
+    cmd: ["php", "-r", "echo PHP_VERSION;"]
+    min: "MIN_PHP_VERSION"
+
+auth_failures:
+  warn: 0      # 0 = report only
+  sources:
+    - name: ssh
+      cmd: ["journalctl", "-u", "sshd", "--since", "-24h", "--no-pager", "-o", "cat"]
+      pattern: '(?:Failed password|Invalid user) .* from (?P<ip>[0-9a-fA-F.:]+)'

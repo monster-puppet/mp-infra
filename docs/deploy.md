@@ -53,10 +53,34 @@ systemctl daemon-reload && systemctl enable --now mpinfra
 curl -s http://<tailnet-ip>:8098/healthz
 ```
 
+`serve` refuses to start unless `ui_addr` and `report_addr` are loopback or tailnet
+addresses on different ports. It keeps a daily `VACUUM INTO` copy at
+`/var/lib/mp-infra/mpinfra.db.backup` and deletes raw reports after 90 days.
+
+Viewer names come from tailscaled's LocalAPI socket
+(`/var/run/tailscale/tailscaled.sock`). Without it the UI shows viewer addresses.
+
 **Do not open the port in firewalld.** It is reached only over `tailscale0`. Check from
 outside the tailnet that it times out.
 
-## 3. Reporting agent, Linux hosts
+## 3. Report tokens
+
+Make one token per host, on any machine with the binary:
+
+```sh
+mpinfra token
+# token:  <put in that host's agent.yaml>
+# sha256: <add host=sha256 to MPINFRA_REPORT_TOKENS in /etc/mp-infra/env>
+```
+
+`MPINFRA_REPORT_TOKENS=monster-p4=<sha256>,jenkins=<sha256>,jenkins-win=<sha256>`.
+The server keeps only the hashes. A report made with one host's token for another
+host is refused with 403.
+
+## 4. Reporting agent, Linux hosts
+
+Start from `examples/agent-monster-p4.yaml` or `examples/agent-jenkins.yaml`. Replace
+the placeholders, then:
 
 ```sh
 install -m 0755 mpinfra-linux-amd64 /usr/local/bin/mpinfra
@@ -70,7 +94,9 @@ echo '*/5 * * * * root /usr/local/bin/mpinfra report -config /etc/mp-infra/agent
 The agent runs as root because the checkpoint log, firewall state and `dnf updateinfo`
 need it. It only reads.
 
-## 4. Reporting agent, `jenkins-win`
+## 5. Reporting agent, `jenkins-win`
+
+Start from `examples/agent-jenkins-win.yaml`.
 
 Over SSH on the tailnet (`ssh jenkins-win`). Multi-line PowerShell over SSH stdin
 silently does nothing there. Send each block as `-EncodedCommand` (base64 UTF-16LE).
@@ -87,7 +113,7 @@ Register-ScheduledTask mp-infra-report -Action $a -Trigger $t -User SYSTEM -RunL
 
 Never open an inbound port on this machine for mp-infra. The agent only connects out.
 
-## 5. Tailscale ACL (Marcus, admin console)
+## 6. Tailscale ACL (Marcus, admin console)
 
 Tag the server device `tag:monitor`. Then add grants along these lines:
 
@@ -101,7 +127,7 @@ Tag the server device `tag:monitor`. Then add grants along these lines:
 UI and report API listen on separate ports (8098, 8099) so the untrusted agent can
 reach only the report endpoint. Test that `jenkins-win` cannot open the UI port.
 
-## 6. Tokens (all read-only, all in `/etc/mp-infra/env`)
+## 7. Tokens (all read-only, all in `/etc/mp-infra/env`)
 
 | Env var | What | Scope |
 |---|---|---|
@@ -110,6 +136,7 @@ reach only the report endpoint. Test that `jenkins-win` cannot open the UI port.
 | `MPINFRA_DO_TOKEN` | DigitalOcean API token | read scope |
 | `MPINFRA_SLACK_WEBHOOK` | new incoming webhook for an alerts channel | — |
 | `MPINFRA_SMTP_PASSWORD` | alert mail | — |
+| `MPINFRA_NOTION_TOKEN` | Notion integration shared with the OpSec checklist only | read content |
 | `MPINFRA_DEADMAN_URL` | heartbeat ping URL | — |
 | `MPINFRA_REPORT_TOKENS` | `host=sha256hash,...` | — |
 

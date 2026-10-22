@@ -1,0 +1,16 @@
+{{define "content"}}{{with .Data}}
+<h1>History</h1>
+<form method="get" action="/history" class="filter">
+  <div class="form-group">
+    <label for="host">Host</label>
+    <select id="host" name="host">
+      <option value="">All hosts</option>
+      {{$cur := .Host}}{{range .Hosts}}<option value="{{.}}"{{if eq . $cur}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </div>
+  <button class="btn" type="submit">Filter</button>
+</form>
+<section class="card">
+  {{template "transitions" .Transitions}}
+</section>
+{{end}}{{end}}
