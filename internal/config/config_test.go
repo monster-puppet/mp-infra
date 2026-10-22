@@ -119,10 +119,22 @@ func TestLoadAgent(t *testing.T) {
 		"host: ''",
 		"host: a\nserver_url: ftp://x",
 		"host: a\nserver_url: not a url",
+		"host: a\nlogins: {allow: [192.0.2.1], sources: [{name: ssh, cmd: [x], pattern: '(?P<ip>.*)'}]}",
+		"host: a\nlogins: {sources: [{name: ssh, cmd: [x], pattern: 'from (\\S+)'}]}",
 	} {
 		if _, err := LoadAgent(write(t, body)); err == nil {
 			t.Errorf("LoadAgent(%q) = nil error", body)
 		}
+	}
+}
+
+func TestLoadAgentLogins(t *testing.T) {
+	c, err := LoadAgent(write(t, "host: a\nlogins: {allow: [192.0.2.7/24], sources: [{name: ssh, cmd: [x], pattern: 'from (?P<ip>\\S+)'}]}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := c.Logins.Nets; len(n) != len(DefaultLoginNets)+1 || n[len(n)-1].String() != "192.0.2.0/24" {
+		t.Errorf("nets = %v", n)
 	}
 }
 

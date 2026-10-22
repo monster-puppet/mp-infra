@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"os"
 	"regexp"
@@ -448,6 +449,9 @@ type Agent struct {
 	SecurityUpdates string         `yaml:"security_updates"` // dnf, apt or windows
 	Versions        []Version      `yaml:"versions"`
 	AuthFailures    *AuthFailures  `yaml:"auth_failures"`
+	Logins          *Logins        `yaml:"logins"`
+	Accounts        bool           `yaml:"accounts"`  // sec.accounts: admins, sudoers, SSH keys
+	Listeners       bool           `yaml:"listeners"` // sec.listeners: listening TCP ports
 	Windows         *WindowsChecks `yaml:"windows"`
 }
 
@@ -475,8 +479,26 @@ type Version struct {
 
 // AuthFailures counts failed logins in command output, one source per service.
 type AuthFailures struct {
-	Warn    int          `yaml:"warn"` // total failures that turn the check warn; 0 = never
-	Sources []AuthSource `yaml:"sources"`
+	Warn      int          `yaml:"warn"`        // total failures that turn the check warn; 0 = never
+	WarnPerIP int          `yaml:"warn_per_ip"` // failures from one IP that turn it warn; 0 = never
+	Sources   []AuthSource `yaml:"sources"`
+}
+
+// Logins lists successful logins, one source per service. A login from an address
+// outside Allow is crit. The tailnet and loopback are always allowed.
+type Logins struct {
+	Allow   []string     `yaml:"allow"`   // extra CIDRs, e.g. an office IP
+	Sources []AuthSource `yaml:"sources"` // pattern needs a named group "ip"; "user" is optional
+
+	Nets []netip.Prefix `yaml:"-"` // Allow plus the defaults, parsed
+}
+
+// DefaultLoginNets are always allowed: the Tailscale ranges and loopback.
+var DefaultLoginNets = []netip.Prefix{
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("fd7a:115c:a1e0::/48"),
+	netip.MustParsePrefix("127.0.0.0/8"),
+	netip.MustParsePrefix("::1/128"),
 }
 
 type AuthSource struct {
@@ -538,6 +560,28 @@ func LoadAgent(path string) (*Agent, error) {
 			}
 			if _, err := regexp.Compile(src.Pattern); err != nil {
 				return nil, fmt.Errorf("%s: auth source %s: %w", path, src.Name, err)
+			}
+		}
+	}
+	if l := c.Logins; l != nil {
+		l.Nets = append([]netip.Prefix{}, DefaultLoginNets...)
+		for _, a := range l.Allow {
+			p, err := netip.ParsePrefix(a)
+			if err != nil {
+				return nil, fmt.Errorf("%s: logins allow %q: want a CIDR such as 192.0.2.10/32", path, a)
+			}
+			l.Nets = append(l.Nets, p.Masked())
+		}
+		for _, src := range l.Sources {
+			if len(src.Cmd) == 0 || src.Pattern == "" {
+				return nil, fmt.Errorf("%s: login source %q needs cmd and pattern", path, src.Name)
+			}
+			re, err := regexp.Compile(src.Pattern)
+			if err != nil {
+				return nil, fmt.Errorf("%s: login source %s: %w", path, src.Name, err)
+			}
+			if re.SubexpIndex("ip") < 0 {
+				return nil, fmt.Errorf("%s: login source %s: pattern needs a named group (?P<ip>...)", path, src.Name)
 			}
 		}
 	}

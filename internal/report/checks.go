@@ -513,6 +513,10 @@ func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error) C
 	if af.Warn > 0 && total >= af.Warn {
 		c.State = eval.Warn
 	}
+	if af.WarnPerIP > 0 && len(top) > 0 && top[0].Count >= af.WarnPerIP {
+		c.State = eval.Warn
+		c.Summary += fmt.Sprintf("; brute force from %s", top[0].IP)
+	}
 	if failed > 0 {
 		c.State = eval.Warn
 		c.Summary += fmt.Sprintf("; %d source(s) failed", failed)

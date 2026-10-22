@@ -10,8 +10,24 @@ windows:
   tailscale_service: Tailscale
   firewall_allow: []     # rule Names (not display names) accepted with RemoteAddress Any
 auth_failures:
+  warn_per_ip: 100   # one IP this often in 24 h is a brute force: warn
   sources:
     - name: rdp
       cmd: ["powershell.exe", "-NoProfile", "-Command",
             "Get-WinEvent -FilterHashtable @{LogName='Security';Id=4625;StartTime=(Get-Date).AddDays(-1)} -ErrorAction SilentlyContinue | ForEach-Object { $_.Properties[19].Value }"]
       pattern: '^(?P<ip>[0-9a-fA-F.:]+)\s*$'
+
+# Successful RDP (type 10) and network (type 3) logons with a source address. One
+# from outside the tailnet (and allow) is crit.
+logins:
+  allow: []
+  sources:
+    - name: rdp
+      cmd: ["powershell.exe", "-NoProfile", "-Command",
+            "Get-WinEvent -FilterHashtable @{LogName='Security';Id=4624;StartTime=(Get-Date).AddDays(-1)} -ErrorAction SilentlyContinue | Where-Object { $_.Properties[8].Value -in 3,10 -and $_.Properties[18].Value -notin '-','','127.0.0.1','::1' } | ForEach-Object { '{0} {1} {2}' -f $_.Properties[5].Value, $_.Properties[18].Value, $_.Properties[8].Value }"]
+      pattern: '^(?P<user>\S+) (?P<ip>[0-9a-fA-F.:]+) \d+\s*$'
+
+# Enabled local users and members of Administrators / Remote Desktop Users /
+# Remote Management Users: a change is crit. Listening TCP ports: a change is warn.
+accounts: true
+listeners: true

@@ -61,6 +61,10 @@ func New(srv *server.Server, who Whoiser) *Web {
 		"ago":      func(t time.Time) string { return ago(srv.Now(), t) },
 		"date":     func(t time.Time) string { return t.Local().Format("2006-01-02 15:04") },
 		"checkURL": checkURL,
+		"shortID":  shortID,
+		"add":      func(a, b any) float64 { return num(a) + num(b) },
+		"sub":      func(a, b any) float64 { return num(a) - num(b) },
+		"half":     func(a any) float64 { return num(a) / 2 },
 		"pathEsc":  url.PathEscape,
 		"label":    w.label,
 		"osName":   func(os string) string { return config.OSNames[os] },
@@ -108,6 +112,22 @@ func (w *Web) label(host string) string {
 
 func checkURL(host, id string) string {
 	return "/check/" + url.PathEscape(host) + "/" + url.PathEscape(id)
+}
+
+// shortID drops the host name from a check id where the card already says which
+// host it is: "disk.monster-p4.root" -> "disk.root", "ts.online.jenkins" ->
+// "ts.online". The full id stays in the link and the title.
+func shortID(host, id string) string {
+	if host == "" {
+		return id
+	}
+	if s := strings.Replace(id, "."+host+".", ".", 1); s != id {
+		return s
+	}
+	if s, ok := strings.CutSuffix(id, "."+host); ok && s != "" {
+		return s
+	}
+	return id
 }
 
 // UI returns the handler for the members-only UI port.
@@ -304,6 +324,7 @@ type rowView struct {
 	Note   string
 	Checks []checkView
 	Counts map[eval.State]int
+	Wide   bool // a group with many checks spans the whole grid row
 }
 
 type homeData struct {
@@ -311,6 +332,7 @@ type homeData struct {
 	Summary string
 	Hosts   []rowView
 	Tailnet *tailnetView
+	Map     *mapView
 	Groups  []rowView
 	Empty   bool
 }
@@ -399,10 +421,14 @@ var groups = []struct {
 	{"Patches", []string{"os.security_updates.", "pkg.version."}},
 	{"Disks and snapshots", []string{"disk.", "snapshot."}},
 	{"Licences", []string{"p4.licence"}},
-	{"Logins", []string{"auth.failures."}},
+	{"Security", []string{"auth.", "sec."}},
 	{"OpSec", []string{"opsec."}},
 	{"Monitor", []string{"serve."}},
 }
+
+// wideGroup is the number of checks from which a group card spans the row, so
+// one long card does not stretch the short ones next to it.
+const wideGroup = 5
 
 func (w *Web) view(c store.Check, now time.Time) checkView {
 	v := checkView{Check: c, Effective: c.State, Acked: c.Acked(now), Age: ago(now, c.UpdatedAt)}
@@ -465,7 +491,8 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 			d.Tailnet = tailnet(v, now)
 		}
 	}
-	for _, h := range w.hosts() {
+	hosts := w.hosts()
+	for _, h := range hosts {
 		row := newRow(h.DisplayName(), byHost[h.Name])
 		row.Host, row.OS, row.OSName = h.Name, config.OSFamily(h.OS), config.OSNames[h.OS]
 		row.Edit = "/host/" + url.PathEscape(h.Name)
@@ -484,6 +511,7 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 		}
 		d.Hosts = append(d.Hosts, row)
 	}
+	d.Map = buildMap(hosts, d.Hosts, all, d.Tailnet)
 	sortRows(d.Hosts)
 	for _, g := range groups {
 		var cs []checkView
@@ -496,10 +524,14 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(cs) > 0 {
-			d.Groups = append(d.Groups, newRow(g.name, cs))
+			row := newRow(g.name, cs)
+			row.Wide = len(cs) >= wideGroup
+			d.Groups = append(d.Groups, row)
 		}
 	}
 	sortRows(d.Groups)
+	// Wide groups first, so the narrow ones after them fill whole rows.
+	sort.SliceStable(d.Groups, func(i, j int) bool { return d.Groups[i].Wide && !d.Groups[j].Wide })
 	counts := map[eval.State]int{}
 	for _, row := range d.Hosts {
 		d.Overall = eval.Worst(d.Overall, row.State)
@@ -529,6 +561,7 @@ type checkData struct {
 	Transitions []store.Transition
 	AckOptions  []ackOption
 	CanAccept   bool
+	AcceptWhat  string
 	Flash       string
 }
 
@@ -573,7 +606,9 @@ func (w *Web) check(rw http.ResponseWriter, r *http.Request) {
 			d.AckOptions = append(d.AckOptions, ackOption{a.d.String(), a.label})
 		}
 	}
-	d.CanAccept = strings.HasPrefix(c.ID, "fw.rules.") && c.State == eval.Warn
+	if b, ok := server.BaselineFor(c.ID); ok && c.State != eval.OK {
+		d.CanAccept, d.AcceptWhat = true, b.What
+	}
 	w.render(rw, r, "check", 200, page{Title: w.label(c.Host) + " · " + c.ID, Section: "home", Data: d})
 }
 
@@ -614,11 +649,11 @@ func (w *Web) unack(rw http.ResponseWriter, r *http.Request) {
 
 func (w *Web) accept(rw http.ResponseWriter, r *http.Request) {
 	host, id := r.PathValue("host"), r.PathValue("id")
-	if err := w.srv.AcceptFirewall(r.Context(), host, id, viewer(r)); err != nil {
+	if err := w.srv.AcceptBaseline(r.Context(), host, id, viewer(r)); err != nil {
 		w.back(rw, r, "Not accepted: "+err.Error())
 		return
 	}
-	log.Printf("firewall %s/%s accepted by %q", host, id, viewer(r))
+	log.Printf("baseline %s/%s accepted by %q", host, id, viewer(r))
 	w.back(rw, r, "")
 }
 

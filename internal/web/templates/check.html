@@ -23,8 +23,8 @@
   <h2>Acknowledge</h2>
   {{if .CanAccept}}
   <form method="post" action="{{checkURL $c.Host $c.ID}}/accept" class="inline-form">
-    <p class="help">Accept the current firewall rules as the new baseline. The check turns ok.</p>
-    <button class="btn btn-primary" type="submit">Accept these rules</button>
+    <p class="help">Accept the current {{.AcceptWhat}} as the new baseline. The check turns ok. Only do this once you know who made the change.</p>
+    <button class="btn btn-primary" type="submit">Accept current {{.AcceptWhat}}</button>
   </form>
   {{end}}
   {{if $c.Acked}}

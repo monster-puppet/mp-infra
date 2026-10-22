@@ -4,8 +4,62 @@
   <p class="overall">{{template "badge" .Overall}} <span>{{if .Summary}}{{.Summary}}{{else}}no checks yet{{end}}</span></p>
 </section>
 
+{{with .Map}}
+<h2 class="section-title">Network</h2>
+<section class="card netmap" aria-label="Network map">
+  <svg class="map-wide" viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="Hosts between the internet and the tailnet">
+    <defs>
+      <filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <g class="bubble bubble-internet">
+      <rect x="28" y="12" width="150" height="{{sub .H 24}}" rx="75"/>
+      <text x="103" y="{{half .H}}" class="bubble-name">Internet</text>
+      {{with .InternetNote}}<text x="103" y="{{add (half $.Data.Map.H) 22}}" class="bubble-note">{{.}}</text>{{end}}
+    </g>
+    <g class="bubble bubble-tailnet">
+      <rect x="{{sub .W 178}}" y="12" width="150" height="{{sub .H 24}}" rx="75"/>
+      <text x="{{sub .W 103}}" y="{{half .H}}" class="bubble-name">Tailnet</text>
+      {{with .TailnetNote}}<text x="{{sub $.Data.Map.W 103}}" y="{{add (half $.Data.Map.H) 22}}" class="bubble-note">{{.}}</text>{{end}}
+    </g>
+    {{range .Nodes}}
+    {{template "maplink" .Internet}}{{template "maplink" .Tailnet}}
+    {{if .Internet.On}}<text x="{{.Internet.LX}}" y="{{.Internet.LY}}" class="map-label">{{.Internet.Label}}</text>{{end}}
+    {{if .Tailnet.On}}<text x="{{.Tailnet.LX}}" y="{{.Tailnet.LY}}" class="map-label">{{.Tailnet.Label}}</text>{{end}}
+    <a href="{{.Href}}" class="map-node node-{{.State}}">
+      <title>{{.Name}}: {{.State}}</title>
+      <rect x="{{sub .X 135}}" y="{{sub .Y 24}}" width="270" height="48" rx="10" class="node-box"/>
+      <circle cx="{{sub .X 113}}" cy="{{.Y}}" r="6" class="node-dot"/>
+      <text x="{{sub .X 98}}" y="{{add .Y 6}}" class="node-name">{{.Name}}</text>
+    </a>
+    {{end}}
+  </svg>
+  <svg class="map-narrow" viewBox="0 0 {{.NW}} {{.NH}}" role="img" aria-label="Hosts between the internet and the tailnet">
+    <g class="bubble bubble-internet">
+      <rect x="12" y="10" width="{{sub .NW 24}}" height="68" rx="34"/>
+      <text x="{{half .NW}}" y="{{if .InternetNote}}42{{else}}50{{end}}" class="bubble-name">Internet</text>
+      {{with .InternetNote}}<text x="{{half $.Data.Map.NW}}" y="62" class="bubble-note">{{.}}</text>{{end}}
+    </g>
+    <g class="bubble bubble-tailnet">
+      <rect x="12" y="{{sub .NH 78}}" width="{{sub .NW 24}}" height="68" rx="34"/>
+      <text x="{{half .NW}}" y="{{if .TailnetNote}}{{sub .NH 46}}{{else}}{{sub .NH 38}}{{end}}" class="bubble-name">Tailnet</text>
+      {{with .TailnetNote}}<text x="{{half $.Data.Map.NW}}" y="{{sub $.Data.Map.NH 26}}" class="bubble-note">{{.}}</text>{{end}}
+    </g>
+    {{range .Narrow}}
+    {{template "maplink" .Internet}}{{template "maplink" .Tailnet}}
+    <a href="{{.Href}}" class="map-node node-{{.State}}">
+      <title>{{.Name}}: {{.State}}</title>
+      <circle cx="{{.X}}" cy="{{.Y}}" r="22" class="node-box"/>
+      <circle cx="{{.X}}" cy="{{.Y}}" r="7" class="node-dot"/>
+      <text x="{{.X}}" y="{{add .Y 44}}" class="node-name node-name-small">{{.Name}}</text>
+    </a>
+    {{end}}
+  </svg>
+  <p class="map-legend"><span class="lg lg-ok"></span>ok <span class="lg lg-warn"></span>warn <span class="lg lg-crit"></span>crit <span class="lg lg-stale"></span>stale <span class="lg lg-none"></span>no data · a line takes the worst check about that side of the host</p>
+</section>
+{{end}}
+
 <h2 class="section-title">Hosts</h2>
-<div class="grid">
+<div class="grid grid-hosts">
 {{range .Hosts}}{{template "row" .}}{{end}}
 </div>
 
@@ -42,7 +96,7 @@
 {{end}}
 
 {{define "row"}}
-<article class="card row state-{{.State}}">
+<article class="card row{{if not .Host}} group{{if .Wide}} group-wide{{end}}{{end}} state-{{.State}}">
   <header class="row-head">
     <h3>{{if .OS}}{{template "osicon" .}}{{end}}{{if .Link}}<a href="{{.Link}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</h3>
     <span class="row-tools">{{if .Edit}}<a class="edit-link" href="{{.Edit}}" title="Rename {{.Name}}" aria-label="Rename {{.Name}}"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></a>{{end}}{{template "badge" .State}}</span>
@@ -53,7 +107,7 @@
     <li class="check{{if .Acked}} acked{{end}}">
       <a href="{{checkURL .Host .ID}}">
         <span class="dot dot-{{.State}}" title="{{.State}}"></span>
-        <span class="check-id">{{.ID}}{{if eq .Host "serve"}}{{else if ne .Host $.Host}} <small>{{label .Host}}</small>{{end}}</span>
+        <span class="check-id" title="{{.ID}}">{{shortID .Host .ID}}{{if eq .Host "serve"}}{{else if ne .Host $.Host}} <small>{{label .Host}}</small>{{end}}</span>
         <span class="check-sum">{{.Summary}}</span>
         <span class="check-age">{{if .Acked}}acknowledged · {{end}}{{.Age}}</span>
       </a>
@@ -64,3 +118,5 @@
   </ul>
 </article>
 {{end}}
+
+{{define "maplink"}}{{if .On}}<a href="{{or .Href "#"}}" class="map-link link-{{.State}}">{{with .Title}}<title>{{.}}</title>{{end}}<path d="{{.Path}}" class="link-hit"/><path d="{{.Path}}" class="link-line"/></a>{{end}}{{end}}

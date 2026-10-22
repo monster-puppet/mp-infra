@@ -228,7 +228,7 @@ func TestFirewallAccept(t *testing.T) {
 		t.Fatalf("changed rules: %+v", c)
 	}
 	page := e.get("/check/jenkins/fw.rules.jenkins").Body.String()
-	if !strings.Contains(page, "Accept these rules") {
+	if !strings.Contains(page, "Accept current firewall rules") {
 		t.Error("no accept button")
 	}
 	rec := httptest.NewRecorder()
@@ -348,5 +348,73 @@ func TestTailnetDevices(t *testing.T) {
 	}
 	if strings.Contains(h, `<span class="device-name">jenkins</span>`) {
 		t.Error("configured host listed as another device")
+	}
+}
+
+func TestAccountsBaseline(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	acc := func(items string) string {
+		return fmt.Sprintf(`{"host":"jenkins","agent_version":"1","collected_at":%q,"checks":[{"id":"sec.accounts.jenkins","state":"ok","summary":"x","data":{"hash":%q,"items":[%s]}}]}`,
+			now.Format(time.RFC3339), items, items)
+	}
+	e.post("tok-jenkins", acc(`"uid0 root","key root ssh-ed25519 SHA256:aaa marcus"`))
+	*e.clock = e.clock.Add(time.Minute)
+	e.post("tok-jenkins", acc(`"uid0 root","uid0 toor","key root ssh-ed25519 SHA256:aaa marcus"`))
+	c, _ := e.srv.Store.Check(ctx, "jenkins", "sec.accounts.jenkins")
+	if c.State != eval.Crit || !strings.Contains(c.Summary, "new: uid0 toor") {
+		t.Fatalf("new root account: %+v", c)
+	}
+	page := e.get("/check/jenkins/sec.accounts.jenkins").Body.String()
+	if !strings.Contains(page, "Accept current accounts and SSH keys") {
+		t.Error("no accept button")
+	}
+	rec := httptest.NewRecorder()
+	e.ui.ServeHTTP(rec, form("/check/jenkins/sec.accounts.jenkins/accept", nil, map[string]string{"Sec-Fetch-Site": "same-origin"}))
+	if c, _ := e.srv.Store.Check(ctx, "jenkins", "sec.accounts.jenkins"); c.State != eval.OK {
+		t.Errorf("after accept: %+v", c)
+	}
+	*e.clock = e.clock.Add(time.Minute)
+	e.post("tok-jenkins", acc(`"uid0 root"`))
+	if c, _ := e.srv.Store.Check(ctx, "jenkins", "sec.accounts.jenkins"); c.State != eval.Crit || !strings.Contains(c.Summary, "gone: uid0 toor, key root") {
+		t.Errorf("removed key: %+v", c)
+	}
+}
+
+func TestShortID(t *testing.T) {
+	for _, tc := range [][3]string{
+		{"monster-p4", "disk.monster-p4.root", "disk.root"},
+		{"jenkins", "ts.online.jenkins", "ts.online"},
+		{"jenkins", "pkg.version.p4d", "pkg.version.p4d"},
+		{"serve", "tls.code-review", "tls.code-review"},
+		{"jenkins", "jenkins", "jenkins"},
+	} {
+		if got := shortID(tc[0], tc[1]); got != tc[2] {
+			t.Errorf("shortID(%q, %q) = %q, want %q", tc[0], tc[1], got, tc[2])
+		}
+	}
+}
+
+func TestNetMap(t *testing.T) {
+	hosts := []config.Host{{Name: "a", PublicIP: "192.0.2.1"}, {Name: "b", NotOnTailnet: true}}
+	cv := func(host, id string, s eval.State) checkView {
+		return checkView{Check: store.Check{Host: host, ID: id, State: s, Summary: id}, Effective: s}
+	}
+	all := []checkView{
+		cv("a", "ports.public.a", eval.OK),
+		cv("a", "auth.logins.a", eval.Crit),
+		cv("a", "ts.online.a", eval.OK),
+		cv("a", "disk.a.root", eval.Warn),
+	}
+	m := buildMap(hosts, nil, all, nil)
+	a, b := m.Nodes[0], m.Nodes[1]
+	if a.Internet.State != "crit" || a.Internet.Href != "/check/a/auth.logins.a" || a.Tailnet.State != "ok" {
+		t.Errorf("a: %+v", a)
+	}
+	if b.Internet.On || b.Tailnet.On {
+		t.Errorf("b has no public IP and is not on the tailnet: %+v", b)
+	}
+	if len(m.Narrow) != 2 || m.H <= 0 || a.Internet.Path == "" {
+		t.Errorf("layout: %+v", m)
 	}
 }

@@ -102,22 +102,75 @@ func (s *Server) Ingest(ctx context.Context, host string, body []byte, p *report
 // applyRules re-evaluates the checks whose state the server decides from what the
 // agent reported.
 func (s *Server) applyRules(ctx context.Context, host string, c *store.Check, now time.Time) error {
-	switch {
-	case strings.HasPrefix(c.ID, "fw.rules."):
-		return s.firewallRule(ctx, host, c, now)
-	case strings.HasPrefix(c.ID, "os.security_updates."):
+	if b, ok := BaselineFor(c.ID); ok {
+		return s.baselineRule(ctx, host, c, b, now)
+	}
+	if strings.HasPrefix(c.ID, "os.security_updates.") {
 		return s.updatesRule(ctx, host, c, now)
 	}
 	return nil
 }
 
-// firewallRule compares the reported rules hash with the accepted one. The first
-// hash ever seen is accepted automatically; a change is warn until someone
-// accepts it in the UI.
-func (s *Server) firewallRule(ctx context.Context, host string, c *store.Check, now time.Time) error {
-	var d struct {
-		Hash string `json:"hash"`
+// Baseline describes a drift check: the agent reports a hash (and, for item
+// lists, the items), the server compares it with the accepted one.
+type Baseline struct {
+	Prefix  string
+	What    string     // "firewall rules"
+	Changed eval.State // the state of a change until someone accepts it
+}
+
+// Baselines are the drift checks. A changed admin account or SSH key is crit, so
+// it alerts at once: that is what a break-in leaves behind.
+var Baselines = []Baseline{
+	{"fw.rules.", "firewall rules", eval.Warn},
+	{"sec.accounts.", "accounts and SSH keys", eval.Crit},
+	{"sec.listeners.", "listening ports", eval.Warn},
+}
+
+// BaselineFor returns the drift check id belongs to.
+func BaselineFor(id string) (Baseline, bool) {
+	for _, b := range Baselines {
+		if strings.HasPrefix(id, b.Prefix) {
+			return b, true
+		}
 	}
+	return Baseline{}, false
+}
+
+type baselineData struct {
+	Hash  string   `json:"hash"`
+	Items []string `json:"items"`
+}
+
+// baselineValue is what the baselines table stores: the hash, then the items one
+// per line, so a later change can say what was added and removed. Firewall
+// checks have no items and store the hash alone.
+func baselineValue(d baselineData) string {
+	var items []string
+	for _, it := range d.Items {
+		if !strings.ContainsAny(it, "\r\n") {
+			items = append(items, it)
+		}
+	}
+	if len(items) == 0 {
+		return d.Hash
+	}
+	return d.Hash + "\n" + strings.Join(items, "\n")
+}
+
+func splitBaseline(v string) (hash string, items []string) {
+	hash, rest, ok := strings.Cut(v, "\n")
+	if ok {
+		items = strings.Split(rest, "\n")
+	}
+	return hash, items
+}
+
+// baselineRule compares the reported hash with the accepted one. The first hash
+// ever seen is accepted automatically; a change keeps b.Changed until someone
+// accepts it in the UI.
+func (s *Server) baselineRule(ctx context.Context, host string, c *store.Check, b Baseline, now time.Time) error {
+	var d baselineData
 	if json.Unmarshal([]byte(c.Data), &d) != nil || d.Hash == "" {
 		return nil // the collector failed; keep its state
 	}
@@ -126,41 +179,76 @@ func (s *Server) firewallRule(ctx context.Context, host string, c *store.Check, 
 		return err
 	}
 	if !ok {
-		if err := s.Store.SetBaseline(ctx, host, c.ID, d.Hash, "first report", now); err != nil {
+		if err := s.Store.SetBaseline(ctx, host, c.ID, baselineValue(d), "first report", now); err != nil {
 			return err
 		}
-		c.State, c.Summary = eval.OK, "firewall rules recorded as the accepted baseline"
+		c.State, c.Summary = eval.OK, b.What+" recorded as the accepted baseline"
 		return nil
 	}
-	if base == d.Hash {
-		c.State, c.Summary = eval.OK, "firewall rules unchanged since "+at.Local().Format("2006-01-02")
+	baseHash, baseItems := splitBaseline(base)
+	if baseHash == d.Hash {
+		c.State, c.Summary = eval.OK, b.What+" unchanged since "+at.Local().Format("2006-01-02")
 		return nil
 	}
-	c.State = eval.Warn
-	c.Summary = fmt.Sprintf("firewall rules changed (accepted %s is %s, now %s)", at.Local().Format("2006-01-02"), short(base), short(d.Hash))
+	c.State = b.Changed
+	added, removed := diffItems(baseItems, d.Items)
+	if len(added)+len(removed) == 0 {
+		c.Summary = fmt.Sprintf("%s changed (accepted %s is %s, now %s)", b.What, at.Local().Format("2006-01-02"), short(baseHash), short(d.Hash))
+		return nil
+	}
+	var parts []string
+	if len(added) > 0 {
+		parts = append(parts, "new: "+strings.Join(added, ", "))
+	}
+	if len(removed) > 0 {
+		parts = append(parts, "gone: "+strings.Join(removed, ", "))
+	}
+	c.Summary = report.Clip(b.What+" changed since "+at.Local().Format("2006-01-02")+"; "+strings.Join(parts, "; "), report.MaxSummary)
 	return nil
 }
 
-// AcceptFirewall accepts the currently reported firewall rules of host.
-func (s *Server) AcceptFirewall(ctx context.Context, host, id, by string) error {
-	if !strings.HasPrefix(id, "fw.rules.") {
-		return fmt.Errorf("%s is not a firewall check", id)
+// diffItems returns the items only in now (added) and only in base (removed).
+func diffItems(base, now []string) (added, removed []string) {
+	in := func(xs []string) map[string]bool {
+		m := map[string]bool{}
+		for _, x := range xs {
+			m[x] = true
+		}
+		return m
+	}
+	b, n := in(base), in(now)
+	for _, x := range now {
+		if !b[x] {
+			added = append(added, x)
+		}
+	}
+	for _, x := range base {
+		if !n[x] {
+			removed = append(removed, x)
+		}
+	}
+	return added, removed
+}
+
+// AcceptBaseline accepts what host currently reports for a drift check.
+func (s *Server) AcceptBaseline(ctx context.Context, host, id, by string) error {
+	b, ok := BaselineFor(id)
+	if !ok {
+		return fmt.Errorf("%s is not a drift check", id)
 	}
 	c, err := s.Store.Check(ctx, host, id)
 	if err != nil || c == nil {
 		return fmt.Errorf("no check %s/%s", host, id)
 	}
-	var d struct {
-		Hash string `json:"hash"`
-	}
+	var d baselineData
 	if json.Unmarshal([]byte(c.Data), &d) != nil || d.Hash == "" {
-		return errors.New("no firewall hash reported")
+		return errors.New("nothing reported to accept")
 	}
 	now := s.Now()
-	if err := s.Store.SetBaseline(ctx, host, id, d.Hash, by, now); err != nil {
+	if err := s.Store.SetBaseline(ctx, host, id, baselineValue(d), by, now); err != nil {
 		return err
 	}
-	c.State, c.Summary = eval.OK, "firewall rules accepted by "+by
+	c.State, c.Summary = eval.OK, b.What+" accepted by "+by
 	t, err := s.Store.PutCheck(ctx, *c, now)
 	if err != nil {
 		return err

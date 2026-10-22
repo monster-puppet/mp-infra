@@ -241,17 +241,26 @@ form.nav-user {
   padding: 1.5rem 1rem 2rem;
 }
 
+/* Cards in a row share its height, so the grid reads as rows and columns
+   instead of a ragged masonry. Hosts get two wide columns (four hosts make a
+   2x2 block); the cross-host groups get three narrower ones. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
-  gap: 1.5rem;
-  align-items: start;
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+  gap: 1.25rem;
+  align-items: stretch;
   margin-bottom: 2.5rem;
+}
+
+.grid-hosts {
+  grid-template-columns: repeat(auto-fill, minmax(min(480px, 100%), 1fr));
 }
 
 .grid .card {
   margin-bottom: 0;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .section-title {
@@ -343,9 +352,14 @@ form.nav-user {
   font-family: 'HeadingFont', sans-serif;
   font-weight: normal;
   font-size: 1.5rem;
+  line-height: 1.15;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   overflow-wrap: anywhere;
+}
+
+.group .row-head h3 {
+  font-size: 1.2rem;
 }
 
 .row-head h3 a {
@@ -360,6 +374,7 @@ form.nav-user {
 .row-note {
   color: var(--text-muted);
   font-size: 0.85rem;
+  margin-top: 0.25rem;
 }
 
 .checks {
@@ -367,15 +382,15 @@ form.nav-user {
   margin-top: 0.75rem;
 }
 
+/* One line per check: dot, id, summary, age. Below 560px the summary drops
+   under the id. */
 .check a {
   display: grid;
-  grid-template-columns: 0.75rem minmax(0, 1fr) auto;
-  grid-template-areas:
-    "dot id age"
-    ". sum sum";
-  column-gap: 0.6rem;
+  grid-template-columns: 0.65rem minmax(7.5rem, 11rem) minmax(0, 1fr) auto;
+  grid-template-areas: "dot id sum age";
+  column-gap: 0.75rem;
   align-items: baseline;
-  padding: 0.45rem 0.5rem;
+  padding: 0.4rem 0.5rem;
   margin: 0 -0.5rem;
   border-radius: 6px;
   color: var(--text);
@@ -402,7 +417,8 @@ form.nav-user {
   width: 0.65rem;
   height: 0.65rem;
   border-radius: 50%;
-  align-self: center;
+  align-self: start;
+  margin-top: 0.42rem;
 }
 
 .dot-ok { background: var(--ok); box-shadow: 0 0 6px rgba(61, 255, 245, 0.5); }
@@ -426,8 +442,40 @@ form.nav-user {
 .check-sum {
   grid-area: sum;
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: var(--text);
   overflow-wrap: anywhere;
+}
+
+/* Group cards are narrower and name the host under the id, so they keep the
+   two-line layout. */
+.group .check a {
+  grid-template-columns: 0.65rem minmax(0, 1fr) auto;
+  grid-template-areas:
+    "dot id age"
+    ". sum sum";
+}
+
+.group .check-sum {
+  color: var(--text-muted);
+}
+
+/* A group with many checks spans the row and goes back to one line per check. */
+.group-wide {
+  grid-column: 1 / -1;
+}
+
+.group-wide .check a {
+  grid-template-columns: 0.65rem minmax(9rem, 13rem) minmax(0, 1fr) auto;
+  grid-template-areas: "dot id sum age";
+}
+
+.group-wide .check-sum {
+  color: var(--text);
+}
+
+.check-id small {
+  display: block;
+  font-size: 0.75rem;
 }
 
 .check-age {
@@ -674,6 +722,14 @@ pre.data {
   .grid {
     gap: 1rem;
   }
+
+  .check a,
+  .group-wide .check a {
+    grid-template-columns: 0.65rem minmax(0, 1fr) auto;
+    grid-template-areas:
+      "dot id age"
+      ". sum sum";
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -799,4 +855,152 @@ pre.data {
 .page-title {
   margin-bottom: 1.5rem;
   overflow-wrap: anywhere;
+}
+
+/* Network map: the internet on the left, the tailnet on the right, hosts in
+   between. Lines take the state of the checks about that side of the host. */
+.netmap {
+  padding: 1rem 1.25rem 0.75rem;
+  margin-bottom: 2.5rem;
+}
+
+.netmap svg {
+  display: block;
+  width: 100%;
+  max-width: 980px;
+  height: auto;
+  margin: 0 auto;
+}
+
+.map-narrow { display: none !important; }
+
+@media (max-width: 640px) {
+  .map-wide { display: none !important; }
+  .map-narrow { display: block !important; }
+}
+
+.bubble rect {
+  stroke-width: 1.5;
+}
+
+.bubble-internet rect {
+  fill: rgba(252, 13, 19, 0.06);
+  stroke: rgba(252, 13, 19, 0.35);
+  stroke-dasharray: 4 5;
+}
+
+.bubble-tailnet rect {
+  fill: rgba(61, 255, 245, 0.05);
+  stroke: rgba(61, 255, 245, 0.35);
+}
+
+.bubble-name {
+  font-family: 'HeadingFont', sans-serif;
+  font-size: 22px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-anchor: middle;
+  fill: var(--text-strong);
+}
+
+.bubble-note {
+  font-size: 12px;
+  text-anchor: middle;
+  fill: var(--text-muted);
+}
+
+.link-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+}
+
+.link-line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.link-ok .link-line {
+  stroke: var(--ok);
+  stroke-opacity: 0.7;
+  stroke-dasharray: 2 8;
+  animation: flow 1.6s linear infinite;
+}
+
+.link-warn .link-line { stroke: var(--warn); }
+.link-crit .link-line { stroke: var(--crit); stroke-width: 3.5; filter: url(#glow); }
+.link-stale .link-line { stroke: var(--stale); stroke-dasharray: 6 6; }
+.link-none .link-line { stroke: var(--text-muted); stroke-opacity: 0.4; stroke-dasharray: 3 6; }
+
+.map-link:hover .link-line { stroke-width: 4; stroke-opacity: 1; }
+
+@keyframes flow { to { stroke-dashoffset: -20; } }
+
+.map-label {
+  font-size: 12px;
+  paint-order: stroke;
+  stroke: #1d1716;
+  stroke-width: 5px;
+  stroke-linejoin: round;
+  text-anchor: middle;
+  fill: var(--text-muted);
+  pointer-events: none;
+}
+
+.node-box {
+  fill: #1f1918;
+  stroke: var(--border-hi);
+  stroke-width: 1;
+}
+
+.map-node:hover .node-box { stroke: var(--text-strong); }
+
+.node-crit .node-box { stroke: var(--crit); }
+.node-warn .node-box { stroke: var(--warn); }
+.node-stale .node-box { stroke: var(--stale); }
+
+.node-dot { stroke: none; }
+.node-ok .node-dot { fill: var(--ok); }
+.node-warn .node-dot { fill: var(--warn); }
+.node-crit .node-dot { fill: var(--crit); }
+.node-stale .node-dot { fill: var(--stale); }
+
+.node-name {
+  font-family: 'HeadingFont', sans-serif;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  fill: var(--text-strong);
+}
+
+.node-name-small {
+  font-size: 14px;
+  text-anchor: middle;
+}
+
+.map-legend {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.lg {
+  display: inline-block;
+  width: 1.1rem;
+  height: 0;
+  margin: 0 0.3rem 0.2rem 0.6rem;
+  border-top: 3px solid;
+  vertical-align: middle;
+}
+
+.lg-ok { border-color: var(--ok); border-top-style: dotted; }
+.lg-warn { border-color: var(--warn); }
+.lg-crit { border-color: var(--crit); }
+.lg-stale { border-color: var(--stale); border-top-style: dashed; }
+.lg-none { border-color: var(--text-muted); border-top-style: dotted; opacity: 0.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .link-ok .link-line { animation: none; }
 }

@@ -135,6 +135,37 @@ func collectors(cfg *config.Agent) []collector {
 			return []Check{c}, err
 		}})
 	}
+	if l := cfg.Logins; l != nil {
+		id := "auth.logins." + cfg.Host
+		cs = append(cs, collector{id: id, onError: eval.Warn, run: func(ctx context.Context) ([]Check, error) {
+			outs := make([]string, len(l.Sources))
+			errs := make([]error, len(l.Sources))
+			for i, src := range l.Sources {
+				outs[i], errs[i] = run(ctx, src.Cmd, src.Env)
+			}
+			return []Check{evalLogins(id, l, outs, errs)}, nil
+		}})
+	}
+	if cfg.Accounts {
+		id := "sec.accounts." + cfg.Host
+		cs = append(cs, collector{id: id, onError: eval.Warn, run: func(ctx context.Context) ([]Check, error) {
+			items, err := localAccounts(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return []Check{itemsCheck(id, "accounts and SSH keys", items)}, nil
+		}})
+	}
+	if cfg.Listeners {
+		id := "sec.listeners." + cfg.Host
+		cs = append(cs, collector{id: id, onError: eval.Warn, run: func(ctx context.Context) ([]Check, error) {
+			items, err := localListeners(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return []Check{itemsCheck(id, "listening ports", items)}, nil
+		}})
+	}
 	if w := cfg.Windows; w != nil {
 		cs = append(cs, windowsCollectors(w)...)
 	}

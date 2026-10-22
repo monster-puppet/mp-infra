@@ -120,13 +120,50 @@ REMOTE
 # --- hosts ---
 declare -a RESULTS
 
+# Security checks every host gets: failed and successful logins (a login from
+# outside the tailnet is crit), and baselines of admin accounts / SSH keys and of
+# listening ports. -t (syslog identifier) works on RHEL and Ubuntu alike, where
+# the unit is sshd or ssh; newer OpenSSH logs sessions as sshd-session.
+LINUX_SEC=$(cat <<'YAML'
+auth_failures:
+  warn_per_ip: 100
+  sources:
+    - name: ssh
+      cmd: ["journalctl", "-t", "sshd", "-t", "sshd-session", "--since", "-24h", "--no-pager", "-o", "cat"]
+      pattern: '(?:Failed password|Invalid user) .* from (?P<ip>[0-9a-fA-F.:]+)'
+logins:
+  sources:
+    - name: ssh
+      cmd: ["journalctl", "-t", "sshd", "-t", "sshd-session", "--since", "-24h", "--no-pager", "-o", "cat"]
+      pattern: 'Accepted \S+ for (?P<user>\S+) from (?P<ip>[0-9a-fA-F.:]+)'
+accounts: true
+listeners: true
+YAML
+)
+WIN_SEC=$(cat <<'YAML'
+auth_failures:
+  warn_per_ip: 100
+  sources:
+    - name: rdp
+      cmd: ["powershell.exe", "-NoProfile", "-Command", "Get-WinEvent -FilterHashtable @{LogName='Security';Id=4625;StartTime=(Get-Date).AddDays(-1)} -ErrorAction SilentlyContinue | ForEach-Object { $_.Properties[19].Value }"]
+      pattern: '^(?P<ip>[0-9a-fA-F.:]+)\s*$'
+logins:
+  sources:
+    - name: rdp
+      cmd: ["powershell.exe", "-NoProfile", "-Command", "Get-WinEvent -FilterHashtable @{LogName='Security';Id=4624;StartTime=(Get-Date).AddDays(-1)} -ErrorAction SilentlyContinue | Where-Object { $_.Properties[8].Value -in 3,10 -and $_.Properties[18].Value -notin '-','','127.0.0.1','::1' } | ForEach-Object { '{0} {1} {2}' -f $_.Properties[5].Value, $_.Properties[18].Value, $_.Properties[8].Value }"]
+      pattern: '^(?P<user>\S+) (?P<ip>[0-9a-fA-F.:]+) \d+\s*$'
+accounts: true
+listeners: true
+YAML
+)
+
 enroll_linux() {
   local name=$1 target=$2 tok=$3 sudo=sudo
   [ "$(ssh "$target" 'id -u' | tr -d '\r')" = 0 ] && sudo=
   scp -q "$LINUX_BIN" "$target:/tmp/mpinfra.new"
   ssh "$target" "$sudo install -d -m 0700 /etc/mp-infra && $sudo install -m 0755 /tmp/mpinfra.new /usr/local/bin/mpinfra && rm -f /tmp/mpinfra.new \
     && if [ -f /etc/mp-infra/agent.yaml ]; then $sudo cp /etc/mp-infra/agent.yaml /etc/mp-infra/agent.yaml.bak; fi"
-  printf 'host: %s\nserver_url: "%s"\ntoken: "%s"\ndisks: ["/"]\n' "$name" "$SERVER_URL" "$tok" \
+  { printf 'host: %s\nserver_url: "%s"\ntoken: "%s"\ndisks: ["/"]\n' "$name" "$SERVER_URL" "$tok"; printf '%s\n' "$LINUX_SEC"; } \
     | ssh "$target" "$sudo tee /etc/mp-infra/agent.yaml >/dev/null && $sudo chmod 600 /etc/mp-infra/agent.yaml"
   ssh "$target" "$sudo /usr/local/bin/mpinfra report -config /etc/mp-infra/agent.yaml" || return 1
   ssh "$target" "echo '*/5 * * * * root /usr/local/bin/mpinfra report -config /etc/mp-infra/agent.yaml >/dev/null 2>&1' | $sudo tee /etc/cron.d/mpinfra >/dev/null"
@@ -148,6 +185,9 @@ server_url: "$SERVER_URL"
 token: "$tok"
 disks: ['C:\\']
 "@ | Set-Content -Encoding ascii "\$d\\agent.yaml"
+@'
+$WIN_SEC
+'@ | Add-Content -Encoding ascii "\$d\\agent.yaml"
 # (OI)(CI) so the files inside inherit it; without them SYSTEM cannot read agent.yaml.
 # Folder only: /T would strip the files' inherited ACEs and leave them unreadable.
 icacls \$d /inheritance:r /grant 'SYSTEM:(OI)(CI)F' /grant 'Administrators:(OI)(CI)F' | Out-Null

@@ -36,8 +36,21 @@ versions:
     min: "MIN_PHP_VERSION"
 
 auth_failures:
-  warn: 0      # 0 = report only
+  warn_per_ip: 100   # one IP this often in 24 h is a brute force: warn
   sources:
     - name: ssh
       cmd: ["journalctl", "-u", "sshd", "--since", "-24h", "--no-pager", "-o", "cat"]
       pattern: '(?:Failed password|Invalid user) .* from (?P<ip>[0-9a-fA-F.:]+)'
+
+# Successful SSH logins. One from outside the tailnet (and allow) is crit.
+logins:
+  allow: []    # extra CIDRs you log in from without Tailscale, e.g. ["OFFICE_IP/32"]
+  sources:
+    - name: ssh
+      cmd: ["journalctl", "-u", "sshd", "--since", "-24h", "--no-pager", "-o", "cat"]
+      pattern: 'Accepted \S+ for (?P<user>\S+) from (?P<ip>[0-9a-fA-F.:]+)'
+
+# Admin accounts, sudoers and SSH authorized_keys: any change is crit until accepted
+# in the UI. Listening TCP ports: a change is warn until accepted.
+accounts: true
+listeners: true
