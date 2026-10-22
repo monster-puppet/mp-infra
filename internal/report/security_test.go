@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/monster-puppet/mp-infra/internal/config"
 	"github.com/monster-puppet/mp-infra/internal/eval"
@@ -40,13 +41,14 @@ func TestLogins(t *testing.T) {
 		"Accepted publickey for marcus from 100.101.102.103 port 50001 ssh2\n" +
 		"Accepted password for deploy from 198.51.100.4 port 1 ssh2\n" +
 		"Failed password for root from 203.0.113.9 port 2 ssh2\n"
-	c := evalLogins("auth.logins.h", l, []string{ssh, "Administrator fd7a:115c:a1e0::1 10\r\n"}, []error{nil, nil})
+	now := time.Date(2026, 10, 22, 17, 0, 0, 0, time.UTC)
+	c := evalLogins("auth.logins.h", l, []string{ssh, "Administrator fd7a:115c:a1e0::1 10\r\n"}, []error{nil, nil}, now)
 	if c.State != eval.OK || !strings.Contains(c.Summary, "4 logins") {
 		t.Errorf("allowed logins: %+v", c)
 	}
 
 	ssh += "Accepted password for root from 203.0.113.9 port 3 ssh2\n"
-	c = evalLogins("auth.logins.h", l, []string{ssh, "Administrator ::ffff:192.0.2.50 10\n"}, []error{nil, nil})
+	c = evalLogins("auth.logins.h", l, []string{ssh, "Administrator ::ffff:192.0.2.50 10\n"}, []error{nil, nil}, now)
 	if c.State != eval.Crit || !strings.Contains(c.Summary, "outside the tailnet") || !strings.Contains(c.Summary, "and 1 more") {
 		t.Errorf("outside login: %+v", c)
 	}
@@ -54,9 +56,46 @@ func TestLogins(t *testing.T) {
 		t.Errorf("outside = %v", out)
 	}
 
-	c = evalLogins("auth.logins.h", l, []string{"", ""}, []error{nil, errors.New("no journal")})
+	c = evalLogins("auth.logins.h", l, []string{"", ""}, []error{nil, errors.New("no journal")}, now)
 	if c.State != eval.Warn || !strings.Contains(c.Summary, "no logins") {
 		t.Errorf("failed source: %+v", c)
+	}
+}
+
+// A source with a "time" group records the newest login per user and address,
+// and the summary says how long ago the outside login was.
+func TestLoginsLast(t *testing.T) {
+	l := &config.Logins{
+		Nets: config.DefaultLoginNets,
+		Sources: []config.AuthSource{
+			{Name: "ssh", Pattern: `^(?P<time>\S+) \S+ sshd\[\d+\]: Accepted \S+ for (?P<user>\S+) from (?P<ip>[0-9a-fA-F.:]+)`},
+			{Name: "rdp", Pattern: `^(?P<time>\S+) (?P<user>\S+) (?P<ip>[0-9a-fA-F.:]+) \d+$`},
+		},
+	}
+	ssh := "2026-10-22T10:51:48+0200 jenkins sshd[1]: Accepted publickey for root from 198.211.111.194 port 1 ssh2\n" +
+		"2026-10-22T09:00:00+02:00 jenkins sshd[2]: Accepted publickey for root from 198.211.111.194 port 2 ssh2\n" +
+		"2026-10-22T18:40:00+0200 jenkins sshd[3]: Accepted publickey for root from 100.102.193.92 port 3 ssh2\n"
+	rdp := "2026-10-22T14:20:00.1234567Z Administrator 100.102.193.92 10\r\n"
+	now := time.Date(2026, 10, 22, 17, 0, 0, 0, time.UTC)
+	c := evalLogins("auth.logins.h", l, []string{ssh, rdp}, []error{nil, nil}, now)
+	want := "login from outside the tailnet: root from 198.211.111.194 (ssh), last 8 h ago"
+	if c.State != eval.Crit || c.Summary != want {
+		t.Errorf("summary = %q, want %q", c.Summary, want)
+	}
+	out := data(t, c)["outside"].([]any)
+	if got := out[0].(map[string]any)["last"]; got != "2026-10-22T08:51:48Z" {
+		t.Errorf("outside last = %v", got)
+	}
+	for _, lg := range data(t, c)["logins"].([]any) {
+		if m := lg.(map[string]any); m["source"] == "rdp" && m["last"] != "2026-10-22T14:20:00Z" {
+			t.Errorf("rdp last = %v", m["last"])
+		}
+	}
+
+	// Without a time group (an older agent config) the summary is unchanged.
+	c = evalLogins("auth.logins.h", loginCfg(), []string{"Accepted publickey for root from 198.211.111.194 port 1 ssh2\n", ""}, []error{nil, nil}, now)
+	if c.Summary != "login from outside the tailnet: root from 198.211.111.194 (ssh)" {
+		t.Errorf("no time group: %q", c.Summary)
 	}
 }
 

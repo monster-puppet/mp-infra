@@ -143,7 +143,7 @@ func collectors(cfg *config.Agent) []collector {
 			for i, src := range l.Sources {
 				outs[i], errs[i] = run(ctx, src.Cmd, src.Env)
 			}
-			return []Check{evalLogins(id, l, outs, errs)}, nil
+			return []Check{evalLogins(id, l, outs, errs, time.Now())}, nil
 		}})
 	}
 	if cfg.Accounts {

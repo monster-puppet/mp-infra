@@ -24,8 +24,8 @@ logins:
   sources:
     - name: rdp
       cmd: ["powershell.exe", "-NoProfile", "-Command",
-            "Get-WinEvent -FilterHashtable @{LogName='Security';Id=4624;StartTime=(Get-Date).AddDays(-1)} -ErrorAction SilentlyContinue | Where-Object { $_.Properties[8].Value -in 3,10 -and $_.Properties[18].Value -notin '-','','127.0.0.1','::1' } | ForEach-Object { '{0} {1} {2}' -f $_.Properties[5].Value, $_.Properties[18].Value, $_.Properties[8].Value }"]
-      pattern: '^(?P<user>\S+) (?P<ip>[0-9a-fA-F.:]+) \d+\s*$'
+            "Get-WinEvent -FilterHashtable @{LogName='Security';Id=4624;StartTime=(Get-Date).AddDays(-1)} -ErrorAction SilentlyContinue | Where-Object { $_.Properties[8].Value -in 3,10 -and $_.Properties[18].Value -notin '-','','127.0.0.1','::1' } | ForEach-Object { '{0} {1} {2} {3}' -f $_.TimeCreated.ToUniversalTime().ToString('o'), $_.Properties[5].Value, $_.Properties[18].Value, $_.Properties[8].Value }"]
+      pattern: '^(?P<time>\S+) (?P<user>\S+) (?P<ip>[0-9a-fA-F.:]+) \d+\s*$'   # "time": the summary says how long ago
 
 # Enabled local users and members of Administrators / Remote Desktop Users /
 # Remote Management Users: a change is crit. Listening TCP ports: a change is warn.

@@ -152,7 +152,7 @@ see deploy.md).
 | id | Source |
 |---|---|
 | `auth.failures.<host>` | report: failed SSH/P4/RDP logins in the last 24 h, top source IPs. warn at `warn` total or `warn_per_ip` from one IP (brute force) |
-| `auth.logins.<host>` | report: successful SSH/RDP logins in the last 24 h. crit when one comes from outside the tailnet, loopback and `logins.allow`, unless the server matches the address to the current public endpoint of an untagged (personal) tailnet device from `ts.devices` |
+| `auth.logins.<host>` | report: successful SSH/RDP logins in the last 24 h. crit when one comes from outside the tailnet, loopback and `logins.allow`, unless the server matches the address to the current public endpoint of an untagged (personal) tailnet device from `ts.devices`. A source pattern with a named group `time` adds each login's newest time (`last`, UTC) and the summary says how long ago the outside login was |
 | `sec.accounts.<host>` | report: uid 0 and login-shell accounts, wheel/sudo members, sudoers hashes, authorized_keys fingerprints (Windows: enabled users, Administrators / RDP / WinRM group members). Item list vs. last accepted: crit on any change, the summary names what was added and removed; accept in the UI |
 | `sec.listeners.<host>` | report: listening TCP sockets (not loopback) and their process; ports from 49152 up are reported as "dynamic". Vs. last accepted: warn on change; accept in the UI |
 | `ts.devices` | Tailscale API: devices not in the expected list, or not seen for 30 days |

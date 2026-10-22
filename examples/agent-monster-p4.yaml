@@ -47,8 +47,8 @@ logins:
   allow: []    # extra CIDRs you log in from without Tailscale, e.g. ["OFFICE_IP/32"]
   sources:
     - name: ssh
-      cmd: ["journalctl", "-u", "sshd", "--since", "-24h", "--no-pager", "-o", "cat"]
-      pattern: 'Accepted \S+ for (?P<user>\S+) from (?P<ip>[0-9a-fA-F.:]+)'
+      cmd: ["journalctl", "-u", "sshd", "--since", "-24h", "--no-pager", "-o", "short-iso"]
+      pattern: '^(?P<time>\S+) \S+ sshd\[\d+\]: Accepted \S+ for (?P<user>\S+) from (?P<ip>[0-9a-fA-F.:]+)'   # "time": the summary says how long ago
 
 # Admin accounts, sudoers and SSH authorized_keys: any change is crit until accepted
 # in the UI. Listening TCP ports: a change is warn until accepted.

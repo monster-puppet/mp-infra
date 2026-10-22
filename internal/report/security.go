@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/monster-puppet/mp-infra/internal/config"
 	"github.com/monster-puppet/mp-infra/internal/eval"
@@ -32,6 +33,10 @@ type Login struct {
 	// Device is set by the server when IP is the public address of a personal
 	// tailnet device (see server.tailnetLoginsRule).
 	Device string `json:"device,omitempty"`
+	// Last is the newest of these logins, RFC 3339 in UTC, when the source
+	// pattern has a named group "time". The check runs every few minutes over
+	// 24 h, so without it a login from this morning reads like one just now.
+	Last string `json:"last,omitempty"`
 }
 
 const maxLogins = 50
@@ -39,16 +44,17 @@ const maxLogins = 50
 // evalLogins lists successful logins. Any login from an address outside the
 // allowed networks (the tailnet, loopback, the configured extras) is crit: on
 // these hosts that is either someone working around the VPN or someone who got in.
-func evalLogins(id string, l *config.Logins, outs []string, errs []error) Check {
+func evalLogins(id string, l *config.Logins, outs []string, errs []error, now time.Time) Check {
 	type key struct{ src, user, ip string }
 	counts := map[key]int{}
+	last := map[key]time.Time{}
 	var failed []string
 	for i, src := range l.Sources {
 		if errs[i] != nil {
 			failed = append(failed, src.Name+": "+Clip(errs[i].Error(), 200))
 		}
 		re := regexp.MustCompile(src.Pattern)
-		ipIdx, userIdx := re.SubexpIndex("ip"), re.SubexpIndex("user")
+		ipIdx, userIdx, timeIdx := re.SubexpIndex("ip"), re.SubexpIndex("user"), re.SubexpIndex("time")
 		for _, line := range strings.Split(outs[i], "\n") {
 			m := re.FindStringSubmatch(strings.TrimRight(line, "\r"))
 			if m == nil || ipIdx < 0 || m[ipIdx] == "" {
@@ -59,12 +65,20 @@ func evalLogins(id string, l *config.Logins, outs []string, errs []error) Check 
 				k.user = Clip(m[userIdx], 64)
 			}
 			counts[k]++
+			if timeIdx > 0 {
+				if t, ok := parseLoginTime(m[timeIdx]); ok && t.After(last[k]) {
+					last[k] = t
+				}
+			}
 		}
 	}
 	var all, outside []Login
 	total := 0
 	for k, n := range counts {
 		lg := Login{Source: k.src, User: k.user, IP: k.ip, Count: n}
+		if t := last[k]; !t.IsZero() {
+			lg.Last = t.Format(time.RFC3339)
+		}
 		total += n
 		all = append(all, lg)
 		if !allowedIP(k.ip, l.Nets) {
@@ -88,7 +102,7 @@ func evalLogins(id string, l *config.Logins, outs []string, errs []error) Check 
 		outside = outside[:maxLogins]
 	}
 	c := Check{ID: id}
-	c.State, c.Summary = LoginsVerdict(total, outside, nil, len(failed))
+	c.State, c.Summary = LoginsVerdict(now, total, outside, nil, len(failed))
 	if outside == nil {
 		outside = []Login{}
 	}
@@ -105,14 +119,18 @@ func evalLogins(id string, l *config.Logins, outs []string, errs []error) Check 
 // LoginsVerdict is the state and summary of auth.logins.<host>: crit when a
 // login came from outside the allowed networks, warn when a source failed.
 // fromDevices are logins the server matched to a personal tailnet device's
-// public address; they are named but do not raise the state.
-func LoginsVerdict(total int, outside, fromDevices []Login, failed int) (eval.State, string) {
+// public address; they are named but do not raise the state. The first outside
+// login's age is relative to now.
+func LoginsVerdict(now time.Time, total int, outside, fromDevices []Login, failed int) (eval.State, string) {
 	state, summary := eval.OK, ""
 	switch {
 	case len(outside) > 0:
 		state = eval.Crit
 		o := outside[0]
 		summary = fmt.Sprintf("login from outside the tailnet: %s from %s (%s)", orUnknown(o.User), o.IP, o.Source)
+		if t, err := time.Parse(time.RFC3339, o.Last); err == nil {
+			summary += ", last " + ago(now, t)
+		}
 		if len(outside) > 1 {
 			summary += fmt.Sprintf(" and %d more", len(outside)-1)
 		}
@@ -139,6 +157,34 @@ func orUnknown(s string) string {
 		return "someone"
 	}
 	return s
+}
+
+// loginTimeLayouts are the timestamps login sources print: journalctl -o
+// short-iso (with and without a colon in the offset, by systemd version) and
+// PowerShell's round-trip format ("o").
+var loginTimeLayouts = []string{time.RFC3339Nano, "2006-01-02T15:04:05-0700", "2006-01-02T15:04:05.999999999-0700"}
+
+func parseLoginTime(s string) (time.Time, bool) {
+	for _, layout := range loginTimeLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC().Truncate(time.Second), true
+		}
+	}
+	return time.Time{}, false
+}
+
+// ago formats the time since t: "just now", "4 min ago", "3 h ago", "2 d ago".
+func ago(now, t time.Time) string {
+	d := now.Sub(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%d min ago", int(d.Minutes()))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%d h ago", int(d.Hours()))
+	}
+	return fmt.Sprintf("%d d ago", int(d.Hours()/24))
 }
 
 // allowedIP reports whether ip is in one of nets. An address that does not parse

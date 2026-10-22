@@ -271,7 +271,7 @@ func TestTailnetLogins(t *testing.T) {
 		for _, ip := range ips {
 			out = append(out, report.Login{Source: "ssh", User: "root", IP: ip, Count: 1})
 		}
-		st, sum := report.LoginsVerdict(len(ips)+2, out, nil, 0)
+		st, sum := report.LoginsVerdict(t0, len(ips)+2, out, nil, 0)
 		d, _ := json.Marshal(map[string]any{"total": len(ips) + 2, "outside": out, "logins": out, "errors": []string{}})
 		return report.Check{ID: "auth.logins.a", State: st, Summary: sum, Data: d}
 	}

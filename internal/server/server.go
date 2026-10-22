@@ -112,7 +112,7 @@ func (s *Server) applyRules(ctx context.Context, host string, c *store.Check, no
 	case strings.HasPrefix(c.ID, "auth.failures."):
 		return s.bruteForceRule(ctx, host, c, now)
 	case strings.HasPrefix(c.ID, "auth.logins."):
-		return s.tailnetLoginsRule(ctx, c)
+		return s.tailnetLoginsRule(ctx, c, now)
 	}
 	return nil
 }
@@ -123,7 +123,7 @@ func (s *Server) applyRules(ctx context.Context, host string, c *store.Check, no
 // devices are servers and CI and do not count: a login from jenkins's public
 // address is still crit. The device lists only current endpoints, so a login
 // from the device's previous address hours ago stays crit.
-func (s *Server) tailnetLoginsRule(ctx context.Context, c *store.Check) error {
+func (s *Server) tailnetLoginsRule(ctx context.Context, c *store.Check, now time.Time) error {
 	var d map[string]json.RawMessage
 	var outside []report.Login
 	var total int
@@ -150,7 +150,7 @@ func (s *Server) tailnetLoginsRule(ctx context.Context, c *store.Check) error {
 	if len(fromDevices) == 0 {
 		return nil
 	}
-	c.State, c.Summary = report.LoginsVerdict(total, still, fromDevices, len(errs))
+	c.State, c.Summary = report.LoginsVerdict(now, total, still, fromDevices, len(errs))
 	c.Summary = report.Clip(c.Summary, report.MaxSummary)
 	d["outside"], d["from_devices"] = mustJSON(still), mustJSON(fromDevices)
 	c.Data = string(mustJSON(d))
