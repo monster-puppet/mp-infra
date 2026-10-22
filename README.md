@@ -7,7 +7,9 @@ It exists because the failures that hurt us were silent ones. The P4 checkpoints
 been failing for six months before anyone noticed. The Windows build agent can lock us
 out for good if Tailscale ever drops off it.
 
-**Status:** scaffold only. The build plan is in [`docs/spec.md`](docs/spec.md).
+**Status:** phases 0–3 of [`docs/spec.md`](docs/spec.md) are built and tested in CI.
+Not yet deployed. Collectors that parse host output still need fixtures captured on
+the real hosts (`internal/report/testdata/README.md`).
 
 ## How it works
 
@@ -31,7 +33,8 @@ Requires Go 1.23+. No Node, no frontend build step.
 make build          # -> bin/mpinfra (bin/mpinfra.exe on Windows)
 make check          # vet + test; run before saying you are done
 make dist           # cross-compile linux/amd64 + windows/amd64 into dist/
-make serve          # run locally on 127.0.0.1:8098 with config.example.yaml
+make serve          # UI on 127.0.0.1:8098, reports on :8099, db in data/
+bin/mpinfra token   # new report token + the hash for MPINFRA_REPORT_TOKENS
 ```
 
 On Windows without `make`:

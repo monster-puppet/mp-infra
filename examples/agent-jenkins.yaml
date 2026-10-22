@@ -1,0 +1,18 @@
+# Agent config for jenkins (CentOS Stream 9). Install as /etc/mp-infra/agent.yaml, mode 0600.
+host: jenkins
+server_url: "http://TAILNET_IP_OF_SERVE:8099"
+token: "PASTE_TOKEN_FROM_mpinfra_token"
+
+disks: ["/"]
+firewall:
+  cmd: ["firewall-cmd", "--list-all"]
+security_updates: dnf
+versions:
+  - name: jenkins
+    cmd: ["rpm", "-q", "--qf", "%{VERSION}", "jenkins"]
+    min: "MIN_JENKINS_VERSION"
+auth_failures:
+  sources:
+    - name: ssh
+      cmd: ["journalctl", "-u", "sshd", "--since", "-24h", "--no-pager", "-o", "cat"]
+      pattern: '(?:Failed password|Invalid user) .* from (?P<ip>[0-9a-fA-F.:]+)'

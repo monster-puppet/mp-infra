@@ -1,0 +1,64 @@
+{{define "content"}}{{with .Data}}{{with .Check}}
+<p class="crumbs"><a href="/">Status</a> / <a href="/history?host={{.Host}}">{{.Host}}</a></p>
+<section class="card detail state-{{.Effective}}">
+  <header class="row-head">
+    <h1 class="detail-title">{{.ID}}</h1>
+    {{template "badge" .State}}
+  </header>
+  <p class="detail-summary">{{.Summary}}</p>
+  <dl class="facts">
+    <dt>Host</dt><dd>{{.Host}}</dd>
+    <dt>State since</dt><dd>{{date .Since}} ({{ago .Since}})</dd>
+    <dt>Last update</dt><dd>{{date .UpdatedAt}} ({{.Age}})</dd>
+    {{if .Acked}}<dt>Acknowledged</dt><dd>until {{date .AckUntil}} by {{.AckBy}}{{if .AckNote}}: {{.AckNote}}{{end}}</dd>{{end}}
+  </dl>
+</section>
+{{end}}
+
+{{if .Flash}}<p class="status status-warn">{{.Flash}}</p>{{end}}
+
+{{$c := .Check}}
+{{if or .AckOptions .CanAccept $c.Acked}}
+<section class="card">
+  <h2>Acknowledge</h2>
+  {{if .CanAccept}}
+  <form method="post" action="{{checkURL $c.Host $c.ID}}/accept" class="inline-form">
+    <p class="help">Accept the current firewall rules as the new baseline. The check turns ok.</p>
+    <button class="btn btn-primary" type="submit">Accept these rules</button>
+  </form>
+  {{end}}
+  {{if $c.Acked}}
+  <form method="post" action="{{checkURL $c.Host $c.ID}}/unack" class="inline-form">
+    <button class="btn" type="submit">Remove acknowledgement</button>
+  </form>
+  {{else if .AckOptions}}
+  <form method="post" action="{{checkURL $c.Host $c.ID}}/ack" class="ack-form">
+    <input type="hidden" name="state" value="{{$c.State}}">
+    <div class="form-group">
+      <label for="ack-for">Acknowledge this {{$c.State}} state for</label>
+      <select id="ack-for" name="for">{{range .AckOptions}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+    </div>
+    <div class="form-group grow">
+      <label for="ack-note">Note</label>
+      <input id="ack-note" name="note" maxlength="300" placeholder="Why this is fine for now">
+    </div>
+    <button class="btn btn-primary" type="submit">Acknowledge</button>
+  </form>
+  <p class="help">An acknowledgement ends early when the state changes. Crit can be acknowledged for 24 hours at most.</p>
+  {{end}}
+</section>
+{{end}}
+
+{{if .DataPretty}}
+<section class="card">
+  <h2>Data</h2>
+  <pre class="data">{{.DataPretty}}</pre>
+</section>
+{{end}}
+
+<section class="card">
+  <h2>Transitions</h2>
+  <p class="help">The last 30 state changes of this check.</p>
+  {{template "transitions" .Transitions}}
+</section>
+{{end}}{{end}}

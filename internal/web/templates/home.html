@@ -1,0 +1,42 @@
+{{define "content"}}{{with .Data}}
+<section class="overview state-{{.Overall}}">
+  <h1>Infra watch</h1>
+  <p class="overall">{{template "badge" .Overall}} <span>{{if .Summary}}{{.Summary}}{{else}}no checks yet{{end}}</span></p>
+</section>
+
+<h2 class="section-title">Hosts</h2>
+<div class="grid">
+{{range .Hosts}}{{template "row" .}}{{end}}
+</div>
+
+{{if .Groups}}
+<h2 class="section-title">Across hosts</h2>
+<div class="grid">
+{{range .Groups}}{{template "row" .}}{{end}}
+</div>
+{{end}}
+{{end}}{{end}}
+
+{{define "row"}}
+<article class="card row state-{{.State}}">
+  <header class="row-head">
+    <h3>{{if .Link}}<a href="{{.Link}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</h3>
+    {{template "badge" .State}}
+  </header>
+  {{if .Note}}<p class="row-note">{{.Note}}</p>{{end}}
+  <ul class="checks">
+  {{range .Checks}}
+    <li class="check{{if .Acked}} acked{{end}}">
+      <a href="{{checkURL .Host .ID}}">
+        <span class="dot dot-{{.State}}" title="{{.State}}"></span>
+        <span class="check-id">{{.ID}}{{if eq .Host "serve"}}{{else if not (eq .Host $.Name)}} <small>{{.Host}}</small>{{end}}</span>
+        <span class="check-sum">{{.Summary}}</span>
+        <span class="check-age">{{if .Acked}}acknowledged · {{end}}{{.Age}}</span>
+      </a>
+    </li>
+  {{else}}
+    <li class="empty">no checks yet</li>
+  {{end}}
+  </ul>
+</article>
+{{end}}

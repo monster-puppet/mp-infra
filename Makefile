@@ -2,6 +2,7 @@ GO      ?= go
 BIN     ?= bin/mpinfra
 PKG     := ./...
 ADDR    ?= 127.0.0.1:8098
+RADDR   ?= 127.0.0.1:8099
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
@@ -23,9 +24,11 @@ vet:
 	$(GO) vet $(PKG)
 
 check: vet test
+	GOOS=windows GOARCH=amd64 $(GO) vet $(PKG)
 
 serve: build
-	$(BIN) serve -config config.example.yaml -addr $(ADDR) -insecure-bind
+	mkdir -p data
+	$(BIN) serve -config config.example.yaml -addr $(ADDR) -report-addr $(RADDR) -db data/mpinfra.db
 
 dist:
 	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o dist/mpinfra-linux-amd64 ./cmd/mpinfra

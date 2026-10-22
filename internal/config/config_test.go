@@ -1,0 +1,112 @@
+package config
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+)
+
+func write(t *testing.T, body string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "c.yaml")
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestLoadServerExample(t *testing.T) {
+	c, err := LoadServer("../../config.example.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Hosts) != 3 || c.StaleAfter != 15*time.Minute {
+		t.Fatalf("got %d hosts, stale_after %s", len(c.Hosts), c.StaleAfter)
+	}
+}
+
+func TestLoadServerRejects(t *testing.T) {
+	for _, body := range []string{
+		"hosts: [{name: A}]",
+		"hosts: [{name: a}, {name: a}]",
+		"stale_after: 10s",
+	} {
+		if _, err := LoadServer(write(t, body)); err == nil {
+			t.Errorf("LoadServer(%q) = nil error", body)
+		}
+	}
+}
+
+func TestReportTokens(t *testing.T) {
+	sum := sha256.Sum256([]byte("secret-a"))
+	hexA := hex.EncodeToString(sum[:])
+	c := &Server{
+		Hosts:           []Host{{Name: "a"}, {Name: "b"}},
+		ReportTokensEnv: "MPINFRA_TEST_TOKENS",
+	}
+	cases := []struct {
+		env string
+		ok  bool
+		n   int
+	}{
+		{"", true, 0},
+		{"a=" + hexA, true, 1},
+		{"a=" + hexA + ", b=" + hexA, true, 2},
+		{"c=" + hexA, false, 0},
+		{"a=" + hexA + ",a=" + hexA, false, 0},
+		{"a=abc", false, 0},
+		{"a", false, 0},
+	}
+	for _, tc := range cases {
+		t.Setenv("MPINFRA_TEST_TOKENS", tc.env)
+		got, err := c.ReportTokens()
+		if (err == nil) != tc.ok || len(got) != tc.n {
+			t.Errorf("env %q: got %d tokens, err %v", tc.env, len(got), err)
+		}
+	}
+
+	t.Setenv("MPINFRA_TEST_TOKENS", "a="+hexA)
+	tok, _ := c.ReportTokens()
+	if h, ok := tok.Lookup(sum[:]); !ok || h != "a" {
+		t.Errorf("Lookup = %q, %v", h, ok)
+	}
+	other := sha256.Sum256([]byte("secret-b"))
+	if _, ok := tok.Lookup(other[:]); ok {
+		t.Error("Lookup matched a wrong token")
+	}
+}
+
+func TestLoadAgent(t *testing.T) {
+	c, err := LoadAgent(write(t, "host: jenkins\nserver_url: http://100.64.0.1:8099\ntoken_env: MPINFRA_TEST_TOK\ntoken: inline\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MPINFRA_TEST_TOK", "from-env")
+	if tok, _ := c.ReportToken(); tok != "from-env" {
+		t.Errorf("token_env should win, got %q", tok)
+	}
+	for _, body := range []string{
+		"host: ''",
+		"host: a\nserver_url: ftp://x",
+		"host: a\nserver_url: not a url",
+	} {
+		if _, err := LoadAgent(write(t, body)); err == nil {
+			t.Errorf("LoadAgent(%q) = nil error", body)
+		}
+	}
+}
+
+func TestLoadAgentExamples(t *testing.T) {
+	paths, _ := filepath.Glob("../../examples/agent-*.yaml")
+	if len(paths) == 0 {
+		t.Fatal("no examples")
+	}
+	for _, p := range paths {
+		if _, err := LoadAgent(p); err != nil {
+			t.Errorf("%s: %v", p, err)
+		}
+	}
+}

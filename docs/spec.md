@@ -215,7 +215,9 @@ internal/probe/       server-side probes (tcp, tls, tailscale, jenkins, digitalo
 internal/store/       SQLite schema + queries
 internal/eval/        thresholds → states, stale detection, transitions
 internal/alert/       slack, smtp, deadman
+internal/server/      ingest, server-side rules, stale sweep, periodic loops
 internal/web/         handlers, templates, static
+examples/             agent configs per host (placeholders only)
 docs/                 spec.md (this), deploy.md
 ```
 
