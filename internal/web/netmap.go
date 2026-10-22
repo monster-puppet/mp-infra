@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -25,12 +26,33 @@ var (
 type mapLink struct {
 	On    bool   // the host is on this network
 	State string // ok, warn, crit, stale or none
-	Label string
 	Title string
 	Href  string
 	Path  string // SVG path, filled in by layout
-	LX    float64
-	LY    float64
+
+	// What the line carries, drawn as badges on it instead of text.
+	Icon  string     // tailnet: link, clock, x or question
+	Ports []portChip // internet: the public ports
+	Alert *mapBadge  // internet: a login or firewall problem
+	// Badges are the above, placed on the line by layout.
+	Badges []mapBadge
+}
+
+// portChip is one public port on an internet line.
+type portChip struct {
+	Port  int
+	Class string // open (expected), bad (open, not expected), closed (expected, closed)
+}
+
+// mapBadge is an icon or a text chip sitting on a line.
+type mapBadge struct {
+	X, Y  float64
+	W     float64 // chip width; icons are round
+	Icon  string  // link, clock, x, question, lock, alert, target
+	Chip  string
+	Class string // the colour: ok, warn, crit, stale, none, or a portChip class
+	Title string
+	Href  string
 }
 
 type mapNode struct {
@@ -42,6 +64,11 @@ type mapNode struct {
 	X, Y     float64 // centre
 	Internet mapLink
 	Tailnet  mapLink
+	// Failed logins on this host in the last 24 h, from auth.failures.
+	Failed      string // "1,832 failed logins · 203.0.113.5", "" when none
+	FailedShort string // "1,832 failed", for the phone layout
+	FailedState string // the check's state, or "active" during a brute force
+	FailedHref  string
 }
 
 type mapView struct {
@@ -56,7 +83,7 @@ type mapView struct {
 }
 
 const (
-	mapW, mapRow, mapPad   = 1000.0, 76.0, 28.0
+	mapW, mapRow, mapPad   = 1000.0, 84.0, 28.0
 	mapBubbleW, mapNodeW   = 150.0, 270.0
 	mapNarrowW, mapNarrowH = 400.0, 380.0
 )
@@ -72,26 +99,137 @@ func (m *mapView) layout() {
 		nd.X, nd.Y = mapW/2, mid+(float64(i)-(n-1)/2)*mapRow
 		// Lines bend toward the middle of each bubble so they read as converging.
 		ey := nd.Y + (mid-nd.Y)*0.4
-		nd.Internet.Path = fmt.Sprintf("M%.0f %.0f C%.0f %.0f %.0f %.0f %.0f %.0f", left, nd.Y, left-60, nd.Y, inEdge+60, ey, inEdge, ey)
-		nd.Tailnet.Path = fmt.Sprintf("M%.0f %.0f C%.0f %.0f %.0f %.0f %.0f %.0f", right, nd.Y, right+60, nd.Y, tsEdge-60, ey, tsEdge, ey)
-		nd.Internet.LX, nd.Internet.LY = (left+inEdge)/2, (nd.Y+ey)/2-10
-		nd.Tailnet.LX, nd.Tailnet.LY = (right+tsEdge)/2, (nd.Y+ey)/2-10
+		var ix, iy, tx, ty float64
+		nd.Internet.Path, ix, iy = curve(left, nd.Y, left-60, nd.Y, inEdge+60, ey, inEdge, ey)
+		nd.Tailnet.Path, tx, ty = curve(right, nd.Y, right+60, nd.Y, tsEdge-60, ey, tsEdge, ey)
+		nd.Internet.Badges = nd.Internet.wideBadges(ix, iy)
+		nd.Tailnet.Badges = nd.Tailnet.wideBadges(tx, ty)
 		nd.Name = clipRunes(nd.Name, 20)
 	}
 
 	m.NW, m.NH = mapNarrowW, mapNarrowH
 	m.Narrow = append([]mapNode(nil), m.Nodes...)
-	for i := range m.Narrow {
-		m.Narrow[i].Name = clipRunes(m.Narrow[i].Name, 12)
-	}
 	step := mapNarrowW / max(1, n)
 	top, bottom := 78.0, mapNarrowH-78
 	for i := range m.Narrow {
 		nd := &m.Narrow[i]
+		nd.Name = clipRunes(nd.Name, 12)
 		nd.X, nd.Y = step*(float64(i)+0.5), mapNarrowH/2
-		nd.Internet.Path = fmt.Sprintf("M%.0f %.0f C%.0f %.0f %.0f %.0f %.0f %.0f", nd.X, nd.Y-24, nd.X, nd.Y-60, mapNarrowW/2+(nd.X-mapNarrowW/2)*0.6, top+30, mapNarrowW/2+(nd.X-mapNarrowW/2)*0.6, top)
-		nd.Tailnet.Path = fmt.Sprintf("M%.0f %.0f C%.0f %.0f %.0f %.0f %.0f %.0f", nd.X, nd.Y+24, nd.X, nd.Y+60, mapNarrowW/2+(nd.X-mapNarrowW/2)*0.6, bottom-30, mapNarrowW/2+(nd.X-mapNarrowW/2)*0.6, bottom)
+		ex := mapNarrowW/2 + (nd.X-mapNarrowW/2)*0.6
+		var ix, iy, tx, ty float64
+		nd.Internet.Path, ix, iy = curve(nd.X, nd.Y-24, nd.X, nd.Y-60, ex, top+30, ex, top)
+		nd.Tailnet.Path, _, _ = curve(nd.X, nd.Y+24, nd.X, nd.Y+60, ex, bottom-30, ex, bottom)
+		// Low on the line, clear of the host's caption.
+		tx, ty = bezier(0.8, nd.X, nd.Y+24, nd.X, nd.Y+60, ex, bottom-30, ex, bottom)
+		nd.Internet.Badges = nd.Internet.narrowBadge(ix, iy)
+		nd.Tailnet.Badges = nd.Tailnet.narrowBadge(tx, ty)
 	}
+}
+
+// bezier returns the point at t on a cubic Bézier.
+func bezier(t, x0, y0, x1, y1, x2, y2, x3, y3 float64) (float64, float64) {
+	u := 1 - t
+	a, b, c, d := u*u*u, 3*u*u*t, 3*u*t*t, t*t*t
+	return a*x0 + b*x1 + c*x2 + d*x3, a*y0 + b*y1 + c*y2 + d*y3
+}
+
+// curve returns a cubic Bézier as an SVG path and its midpoint.
+func curve(x0, y0, x1, y1, x2, y2, x3, y3 float64) (string, float64, float64) {
+	return fmt.Sprintf("M%.0f %.0f C%.0f %.0f %.0f %.0f %.0f %.0f", x0, y0, x1, y1, x2, y2, x3, y3),
+		(x0 + 3*x1 + 3*x2 + x3) / 8, (y0 + 3*y1 + 3*y2 + y3) / 8
+}
+
+const (
+	iconW    = 26.0
+	badgeGap = 4.0
+	maxChips = 5
+)
+
+func chipW(text string) float64 { return 12 + 7*float64(len(text)) }
+
+// wideBadges lays out the line's badges in a row centred on (x, y): the alert
+// first, then one chip per port.
+func (l mapLink) wideBadges(x, y float64) []mapBadge {
+	if !l.On {
+		return nil
+	}
+	var bs []mapBadge
+	if l.Icon != "" {
+		bs = append(bs, mapBadge{Icon: l.Icon, Class: l.State, Title: l.Title, Href: l.Href})
+	}
+	if l.Alert != nil {
+		bs = append(bs, *l.Alert)
+	}
+	ports := l.Ports
+	more := 0
+	if len(ports) > maxChips {
+		ports, more = ports[:maxChips-1], len(ports)-(maxChips-1)
+	}
+	for _, p := range ports {
+		bs = append(bs, mapBadge{Chip: fmt.Sprint(p.Port), Class: p.Class, Title: portTitle(p), Href: l.Href})
+	}
+	if more > 0 {
+		bs = append(bs, mapBadge{Chip: fmt.Sprintf("+%d", more), Class: "open", Title: l.Title, Href: l.Href})
+	}
+	total := -badgeGap
+	for i := range bs {
+		if bs[i].Icon != "" {
+			bs[i].W = iconW
+		} else {
+			bs[i].W = chipW(bs[i].Chip)
+		}
+		total += bs[i].W + badgeGap
+	}
+	at := x - total/2
+	for i := range bs {
+		bs[i].X, bs[i].Y = at+bs[i].W/2, y
+		at += bs[i].W + badgeGap
+	}
+	return bs
+}
+
+// narrowBadge sums the line up in one badge for the phone layout.
+func (l mapLink) narrowBadge(x, y float64) []mapBadge {
+	if !l.On {
+		return nil
+	}
+	b := mapBadge{X: x, Y: y, W: iconW, Icon: l.Icon, Class: l.State, Title: l.Title, Href: l.Href}
+	switch {
+	case l.Alert != nil:
+		b.Icon, b.Class = l.Alert.Icon, l.Alert.Class
+	case l.Icon == "":
+		open, bad := 0, 0
+		for _, p := range l.Ports {
+			if p.Class == "bad" {
+				bad++
+			}
+			if p.Class != "closed" {
+				open++
+			}
+		}
+		switch {
+		case bad > 0:
+			b.Icon, b.Chip, b.Class = "", fmt.Sprintf("%d open", open), "bad"
+		case open > 0:
+			b.Icon, b.Chip, b.Class = "", fmt.Sprintf("%d open", open), l.State
+		default:
+			b.Icon = "lock"
+		}
+		if b.Chip != "" {
+			b.W = chipW(b.Chip)
+		}
+	}
+	return []mapBadge{b}
+}
+
+func portTitle(p portChip) string {
+	switch p.Class {
+	case "bad":
+		return fmt.Sprintf("port %d open, not expected", p.Port)
+	case "closed":
+		return fmt.Sprintf("port %d expected open, closed", p.Port)
+	}
+	return fmt.Sprintf("port %d open", p.Port)
 }
 
 // buildMap makes the map from the configured hosts and every current check.
@@ -118,9 +256,36 @@ func buildMap(hosts []config.Host, rows []rowView, all []checkView, tn *tailnetV
 				if strings.HasPrefix(c.ID, "auth.failures.") {
 					var d struct {
 						Total int `json:"total"`
+						Top   []struct {
+							IP string `json:"ip"`
+						} `json:"top_ips"`
+						Active   bool   `json:"active"`
+						Recent   int    `json:"recent"`
+						RecentIP string `json:"recent_ip"`
 					}
-					if json.Unmarshal([]byte(c.Data), &d) == nil {
+					switch {
+					case json.Unmarshal([]byte(c.Data), &d) != nil:
+					case d.Active:
+						// Set by the server when the count jumps between two reports.
 						failed += d.Total
+						nd.Failed = "Under attack"
+						if d.RecentIP != "" {
+							nd.Failed += " · " + d.RecentIP
+						}
+						nd.Failed = clipRunes(nd.Failed, 36)
+						nd.FailedShort = "under attack"
+						nd.FailedState = "active"
+						nd.FailedHref = checkURL(c.Host, c.ID)
+					case d.Total > 0:
+						failed += d.Total
+						nd.Failed = fmt.Sprintf("%s failed login%s / 24 h", thousands(d.Total), plural(d.Total))
+						if len(d.Top) > 0 && d.Top[0].IP != "" {
+							nd.Failed += " · " + d.Top[0].IP
+						}
+						nd.Failed = clipRunes(nd.Failed, 36)
+						nd.FailedShort = thousands(d.Total) + " failed"
+						nd.FailedState = string(c.Effective)
+						nd.FailedHref = checkURL(c.Host, c.ID)
 					}
 				}
 			}
@@ -128,19 +293,25 @@ func buildMap(hosts []config.Host, rows []rowView, all []checkView, tn *tailnetV
 				ts = append(ts, c)
 			}
 		}
-		nd.Internet = link(h.PublicIP != "", in, "ports.public.")
-		nd.Tailnet = link(!h.NotOnTailnet, ts, "ts.online.")
+		if nd.FailedState == "active" {
+			nd.Href = nd.FailedHref
+		}
+		nd.Internet = internetLink(h.PublicIP != "", in)
+		nd.Tailnet = tailnetLink(!h.NotOnTailnet, ts)
 		if nd.State == eval.Stale {
 			for _, l := range []*mapLink{&nd.Internet, &nd.Tailnet} {
 				if l.On && l.State == "ok" {
 					l.State = string(eval.Stale)
+					if l.Icon == "link" {
+						l.Icon = "question"
+					}
 				}
 			}
 		}
 		m.Nodes = append(m.Nodes, nd)
 	}
 	if failed > 0 {
-		m.InternetNote = fmt.Sprintf("%d failed logins / 24 h", failed)
+		m.InternetNote = fmt.Sprintf("%s failed logins / 24 h", thousands(failed))
 	}
 	if tn != nil {
 		m.TailnetNote = fmt.Sprintf("+%d other device%s", len(tn.Online), plural(len(tn.Online)))
@@ -149,35 +320,108 @@ func buildMap(hosts []config.Host, rows []rowView, all []checkView, tn *tailnetV
 	return m
 }
 
-// link sums up one side of a host. The label is the worst check's summary when
-// something is wrong, else the summary of the main check for that side.
-func link(on bool, cs []checkView, main string) mapLink {
-	l := mapLink{On: on, State: "none", Label: "no checks yet"}
+// summarize sets the line's state, tooltip and link from the worst of cs.
+func summarize(l *mapLink, cs []checkView) (worst *checkView) {
+	l.State = "none"
+	var titles []string
+	for i, c := range cs {
+		titles = append(titles, shortID(c.Host, c.ID)+": "+c.Summary)
+		if worst == nil || c.Effective.Severity() > worst.Effective.Severity() {
+			worst = &cs[i]
+		}
+	}
+	l.Title = strings.Join(titles, "\n")
+	if worst != nil {
+		l.State, l.Href = string(worst.Effective), checkURL(worst.Host, worst.ID)
+	}
+	return worst
+}
+
+// tailnetLink: one icon for how the host is on the tailnet.
+func tailnetLink(on bool, cs []checkView) mapLink {
+	l := mapLink{On: on}
 	if !on {
 		return l
 	}
-	worst := -1
-	var titles []string
-	for i, c := range cs {
-		titles = append(titles, c.ID+": "+string(c.Effective)+" · "+c.Summary)
-		if worst < 0 || c.Effective.Severity() > cs[worst].Effective.Severity() {
-			worst = i
-		}
+	summarize(&l, cs)
+	l.Icon = map[string]string{"ok": "link", "warn": "clock", "crit": "x"}[l.State]
+	if l.Icon == "" {
+		l.Icon = "question"
 	}
-	if worst < 0 {
+	if l.Title == "" {
+		l.Title = "no Tailscale data yet"
+	}
+	return l
+}
+
+// internetLink: a chip per public port, and an alert icon for the worst login or
+// firewall problem.
+func internetLink(on bool, cs []checkView) mapLink {
+	l := mapLink{On: on}
+	if !on {
 		return l
 	}
-	w := cs[worst]
-	l.State, l.Href, l.Label = string(w.Effective), checkURL(w.Host, w.ID), w.Summary
-	if w.Effective == eval.OK {
-		for _, c := range cs {
-			if strings.HasPrefix(c.ID, main) {
-				l.Href, l.Label = checkURL(c.Host, c.ID), c.Summary
+	summarize(&l, cs)
+	var ports *checkView
+	var problem *checkView
+	for i, c := range cs {
+		if strings.HasPrefix(c.ID, "ports.public.") {
+			ports = &cs[i]
+			continue
+		}
+		if c.Effective != eval.OK && (problem == nil || c.Effective.Severity() > problem.Effective.Severity()) {
+			problem = &cs[i]
+		}
+	}
+	if problem != nil {
+		l.Alert = &mapBadge{Icon: "alert", Class: string(problem.Effective), Title: problem.Summary, Href: checkURL(problem.Host, problem.ID)}
+		if strings.HasPrefix(problem.ID, "auth.failures.") {
+			l.Alert.Icon = "target"
+			var d struct {
+				Active bool `json:"active"`
+			}
+			if json.Unmarshal([]byte(problem.Data), &d) == nil && d.Active {
+				l.Alert.Class = "active" // red and pulsing, see style.css
 			}
 		}
 	}
-	l.Label = clipRunes(l.Label, 26)
-	l.Title = strings.Join(titles, "\n")
+	if ports == nil {
+		if problem == nil {
+			l.Icon = "question"
+			if l.Title == "" {
+				l.Title = "public ports not scanned yet"
+			}
+		}
+		return l
+	}
+	var d struct {
+		Open       []int `json:"open"`
+		Expected   []int `json:"expected"`
+		Unexpected []int `json:"unexpected"`
+		Closed     []int `json:"expected_closed"`
+	}
+	json.Unmarshal([]byte(ports.Data), &d)
+	bad := map[int]bool{}
+	for _, p := range d.Unexpected {
+		bad[p] = true
+	}
+	for _, p := range d.Open {
+		cls := "open"
+		if bad[p] {
+			cls = "bad"
+		}
+		l.Ports = append(l.Ports, portChip{p, cls})
+	}
+	for _, p := range d.Closed {
+		l.Ports = append(l.Ports, portChip{p, "closed"})
+	}
+	sort.Slice(l.Ports, func(i, j int) bool { return l.Ports[i].Port < l.Ports[j].Port })
+	if len(l.Ports) == 0 && problem == nil {
+		l.Icon = "lock" // nothing open to the internet
+	}
+	if l.Href == "" || problem == nil {
+		l.Href = checkURL(ports.Host, ports.ID)
+	}
 	return l
 }
 
@@ -195,6 +439,15 @@ func clipRunes(s string, n int) string {
 		return s
 	}
 	return string([]rune(s)[:n-1]) + "…"
+}
+
+// thousands formats 1832 as "1,832".
+func thousands(n int) string {
+	s := fmt.Sprint(n)
+	for i := len(s) - 3; i > 0 && s[i-1] != '-'; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
 }
 
 func plural(n int) string {

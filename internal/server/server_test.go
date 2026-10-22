@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -200,5 +201,54 @@ func TestDaily(t *testing.T) {
 	s.Daily(context.Background())
 	if fi, err := os.Stat(s.Cfg.DB + ".backup"); err != nil || fi.Size() == 0 {
 		t.Fatalf("no backup: %v", err)
+	}
+}
+
+func TestBruteForceActive(t *testing.T) {
+	s, _, clock := setup(t, config.Host{Name: "a"})
+	ctx := context.Background()
+	fail := func(total, top int) report.Check {
+		d, _ := json.Marshal(map[string]any{"total": total, "top_ips": []map[string]any{{"ip": "203.0.113.5", "count": top}, {"ip": "198.51.100.1", "count": 40}}})
+		return report.Check{ID: "auth.failures.a", State: eval.OK, Summary: "n failed logins in 24 h", Data: d}
+	}
+	get := func() *store.Check {
+		c, _ := s.Store.Check(ctx, "a", "auth.failures.a")
+		return c
+	}
+	send := func(c report.Check) {
+		t.Helper()
+		if err := s.Ingest(ctx, "a", []byte(`{}`), payload("a", c)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	send(fail(500, 100))
+	if c := get(); c.State != eval.OK {
+		t.Fatalf("first report: %+v", c)
+	}
+	*clock = clock.Add(5 * time.Minute)
+	send(fail(510, 105)) // +10: background noise
+	if c := get(); c.State != eval.OK || strings.Contains(c.Summary, "active") {
+		t.Fatalf("+10: %+v", c)
+	}
+	*clock = clock.Add(5 * time.Minute)
+	send(fail(700, 290)) // +190 in 5 min
+	c := get()
+	if c.State != eval.Warn || !strings.Contains(c.Summary, "active brute force: 190 failed logins in the last 5 min, mostly from 203.0.113.5") {
+		t.Fatalf("+190: %+v", c)
+	}
+	var d map[string]any
+	json.Unmarshal([]byte(c.Data), &d)
+	if d["active"] != true || d["recent_ip"] != "203.0.113.5" || d["total"].(float64) != 700 {
+		t.Errorf("data: %v", d)
+	}
+	*clock = clock.Add(5 * time.Minute)
+	send(fail(705, 290)) // the attack stopped
+	if c := get(); c.State != eval.OK {
+		t.Errorf("after attack: %+v", c)
+	}
+	*clock = clock.Add(time.Hour)
+	send(fail(900, 400)) // a big jump after a long gap is not "now"
+	if c := get(); c.State != eval.OK {
+		t.Errorf("after gap: %+v", c)
 	}
 }

@@ -51,6 +51,7 @@ thresholds:
   snapshot_warn_days: 35
   snapshot_crit_days: 60
   updates_crit_age: 336h        # 14 days
+  bruteforce_active: 30         # new failed logins between two reports = active brute force
 
 tls:
   - name: code-review

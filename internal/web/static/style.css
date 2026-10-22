@@ -292,9 +292,14 @@ form.nav-user {
   pointer-events: none;
 }
 
+/* The heading font is for the page title and section titles only. */
 .card h2 {
   margin-bottom: 1rem;
-  font-size: 1.4rem;
+  font-family: inherit;
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* A card whose worst state is bad gets a coloured edge on the left. */
@@ -349,17 +354,15 @@ form.nav-user {
 }
 
 .row-head h3 {
-  font-family: 'HeadingFont', sans-serif;
-  font-weight: normal;
-  font-size: 1.5rem;
-  line-height: 1.15;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-weight: 650;
+  font-size: 1.2rem;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
   overflow-wrap: anywhere;
 }
 
 .group .row-head h3 {
-  font-size: 1.2rem;
+  font-size: 1.05rem;
 }
 
 .row-head h3 a {
@@ -895,9 +898,9 @@ pre.data {
 }
 
 .bubble-name {
-  font-family: 'HeadingFont', sans-serif;
-  font-size: 22px;
-  letter-spacing: 0.05em;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   text-anchor: middle;
   fill: var(--text-strong);
@@ -937,17 +940,6 @@ pre.data {
 
 @keyframes flow { to { stroke-dashoffset: -20; } }
 
-.map-label {
-  font-size: 12px;
-  paint-order: stroke;
-  stroke: #1d1716;
-  stroke-width: 5px;
-  stroke-linejoin: round;
-  text-anchor: middle;
-  fill: var(--text-muted);
-  pointer-events: none;
-}
-
 .node-box {
   fill: #1f1918;
   stroke: var(--border-hi);
@@ -967,15 +959,45 @@ pre.data {
 .node-stale .node-dot { fill: var(--stale); }
 
 .node-name {
-  font-family: 'HeadingFont', sans-serif;
-  font-size: 18px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 16px;
+  font-weight: 650;
   fill: var(--text-strong);
 }
 
+.node-failed {
+  font-size: 12px;
+  fill: var(--text-muted);
+}
+
+.node-failed-small {
+  font-size: 11px;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: #1d1716;
+  stroke-width: 4px;
+}
+
+.failed-warn { fill: var(--warn); }
+.failed-crit { fill: var(--crit); }
+
+/* An active brute force: red label and a pulsing outline on the host. */
+.failed-active {
+  fill: var(--crit);
+  font-weight: 700;
+}
+
+.node-attacked .node-box {
+  stroke: var(--crit);
+  stroke-width: 2;
+  animation: attacked 1.2s ease-in-out infinite;
+}
+
+@keyframes attacked {
+  50% { stroke-opacity: 0.3; }
+}
+
 .node-name-small {
-  font-size: 14px;
+  font-size: 12px;
   text-anchor: middle;
 }
 
@@ -1002,5 +1024,81 @@ pre.data {
 .lg-none { border-color: var(--text-muted); border-top-style: dotted; opacity: 0.5; }
 
 @media (prefers-reduced-motion: reduce) {
-  .link-ok .link-line { animation: none; }
+  .link-ok .link-line,
+  .node-attacked .node-box { animation: none; }
 }
+
+/* Badges on the map lines: an icon, or a chip per public port. */
+.badge-bg {
+  fill: #1d1716;
+  stroke-width: 1.5;
+}
+
+.map-icon {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chip {
+  fill: #1d1716;
+  stroke-width: 1.3;
+}
+
+.chip-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+}
+
+.mb-ok .badge-bg, .mb-ok .chip, .mb-open .chip { stroke: var(--ok); }
+.mb-ok .map-icon, .mb-ok .chip-text, .mb-open .chip-text { stroke: var(--ok); fill: var(--ok); }
+.mb-ok .map-icon { fill: none; }
+.mb-warn .badge-bg, .mb-warn .chip { stroke: var(--warn); }
+.mb-warn .map-icon { stroke: var(--warn); }
+.mb-warn .chip-text { fill: var(--warn); }
+.mb-crit .badge-bg, .mb-crit .chip { stroke: var(--crit); }
+.mb-crit .map-icon { stroke: var(--crit); }
+.mb-crit .chip-text { fill: var(--crit); }
+.mb-stale .badge-bg, .mb-stale .chip { stroke: var(--stale); }
+.mb-stale .map-icon { stroke: var(--stale); }
+.mb-stale .chip-text { fill: var(--stale); }
+.mb-none .badge-bg { stroke: var(--text-muted); stroke-opacity: 0.5; }
+.mb-none .map-icon { stroke: var(--text-muted); }
+
+/* An unexpected open port: solid red. An expected port that is closed: dashed. */
+.mb-bad .chip { fill: var(--crit); stroke: var(--crit); }
+.mb-bad .chip-text { fill: var(--on-primary); }
+.mb-closed .chip { stroke: var(--warn); stroke-dasharray: 3 2; }
+.mb-closed .chip-text { fill: var(--warn); text-decoration: line-through; }
+
+/* An active brute force: a red target that pulses. */
+.mb-active .badge-bg { fill: var(--crit); stroke: var(--crit); animation: attacked-badge 1.2s ease-in-out infinite; }
+.mb-active .map-icon { stroke: var(--on-primary); }
+
+@keyframes attacked-badge {
+  50% { fill-opacity: 0.45; stroke-width: 5; stroke-opacity: 0.4; }
+}
+
+.map-badge:hover .badge-bg, .map-badge:hover .chip { stroke-width: 2.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-active .badge-bg { animation: none; }
+}
+
+.lg-chip {
+  display: inline-block;
+  padding: 0 0.45rem;
+  margin: 0 0.15rem 0 0.5rem;
+  border: 1px solid var(--ok);
+  border-radius: 999px;
+  color: var(--ok);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.lg-chip-bad { background: var(--crit); border-color: var(--crit); color: var(--on-primary); }
+.lg-chip-closed { border-style: dashed; border-color: var(--warn); color: var(--warn); text-decoration: line-through; }

@@ -100,6 +100,9 @@ type Thresholds struct {
 	SnapshotWarnDays    float64       `yaml:"snapshot_warn_days"`
 	SnapshotCritDays    float64       `yaml:"snapshot_crit_days"`
 	UpdatesCritAge      time.Duration `yaml:"updates_crit_age"`
+	// BruteForceActive is how many new failed logins between two reports of a
+	// host (normally 5 minutes apart) make an active brute force.
+	BruteForceActive int `yaml:"bruteforce_active"`
 }
 
 type TLSTarget struct {
@@ -327,6 +330,9 @@ func (c *Server) ApplyDefaults() {
 	deff(&t.SnapshotWarnDays, 35)
 	deff(&t.SnapshotCritDays, 60)
 	def(&t.UpdatesCritAge, 14*24*time.Hour)
+	if t.BruteForceActive <= 0 {
+		t.BruteForceActive = 30
+	}
 	def(&c.Alerts.CritReminder, 12*time.Hour)
 	if c.Alerts.SMTPPort == 0 {
 		c.Alerts.SMTPPort = 587

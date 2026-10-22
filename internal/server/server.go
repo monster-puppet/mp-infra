@@ -105,8 +105,74 @@ func (s *Server) applyRules(ctx context.Context, host string, c *store.Check, no
 	if b, ok := BaselineFor(c.ID); ok {
 		return s.baselineRule(ctx, host, c, b, now)
 	}
-	if strings.HasPrefix(c.ID, "os.security_updates.") {
+	switch {
+	case strings.HasPrefix(c.ID, "os.security_updates."):
 		return s.updatesRule(ctx, host, c, now)
+	case strings.HasPrefix(c.ID, "auth.failures."):
+		return s.bruteForceRule(ctx, host, c, now)
+	}
+	return nil
+}
+
+// bruteForceWindow is the longest gap between two reports that still counts as
+// "now" when comparing their failed-login totals.
+const bruteForceWindow = 15 * time.Minute
+
+type failuresData struct {
+	Total  int `json:"total"`
+	TopIPs []struct {
+		IP    string `json:"ip"`
+		Count int    `json:"count"`
+	} `json:"top_ips"`
+}
+
+// bruteForceRule compares the 24-hour failed-login count with the previous
+// report's. When it grew by Thresholds.BruteForceActive or more since then, a
+// brute force is going on right now: the check turns warn, its summary says so
+// and names the address that grew most, and its data gets "active".
+func (s *Server) bruteForceRule(ctx context.Context, host string, c *store.Check, now time.Time) error {
+	var cur failuresData
+	if json.Unmarshal([]byte(c.Data), &cur) != nil {
+		return nil
+	}
+	prev, err := s.Store.Check(ctx, host, c.ID)
+	if err != nil || prev == nil || now.Sub(prev.UpdatedAt) > bruteForceWindow {
+		return err
+	}
+	var old failuresData
+	if json.Unmarshal([]byte(prev.Data), &old) != nil {
+		return nil
+	}
+	recent := cur.Total - old.Total
+	if recent < s.Cfg.Thresholds.BruteForceActive {
+		return nil
+	}
+	before := map[string]int{}
+	for _, t := range old.TopIPs {
+		before[t.IP] = t.Count
+	}
+	ip, most := "", 0
+	for _, t := range cur.TopIPs {
+		if d := t.Count - before[t.IP]; d > most {
+			ip, most = t.IP, d
+		}
+	}
+	mins := int(now.Sub(prev.UpdatedAt).Round(time.Minute) / time.Minute)
+	summary := fmt.Sprintf("active brute force: %d failed logins in the last %d min", recent, max(mins, 1))
+	if ip != "" {
+		summary += ", mostly from " + ip
+	}
+	c.State = eval.Worst(c.State, eval.Warn)
+	c.Summary = report.Clip(summary+"; "+c.Summary, report.MaxSummary)
+	var d map[string]any
+	if json.Unmarshal([]byte(c.Data), &d) == nil {
+		d["active"] = true
+		d["recent"] = recent
+		d["recent_minutes"] = mins
+		if ip != "" {
+			d["recent_ip"] = ip
+		}
+		c.Data = string(mustJSON(d))
 	}
 	return nil
 }

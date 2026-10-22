@@ -21,15 +21,22 @@
       <text x="{{sub .W 103}}" y="{{half .H}}" class="bubble-name">Tailnet</text>
       {{with .TailnetNote}}<text x="{{sub $.Data.Map.W 103}}" y="{{add (half $.Data.Map.H) 22}}" class="bubble-note">{{.}}</text>{{end}}
     </g>
+    {{range .Nodes}}{{template "maplink" .Internet}}{{template "maplink" .Tailnet}}{{end}}
+    {{range .Nodes}}{{template "badges" .Internet.Badges}}{{template "badges" .Tailnet.Badges}}{{end}}
     {{range .Nodes}}
-    {{template "maplink" .Internet}}{{template "maplink" .Tailnet}}
-    {{if .Internet.On}}<text x="{{.Internet.LX}}" y="{{.Internet.LY}}" class="map-label">{{.Internet.Label}}</text>{{end}}
-    {{if .Tailnet.On}}<text x="{{.Tailnet.LX}}" y="{{.Tailnet.LY}}" class="map-label">{{.Tailnet.Label}}</text>{{end}}
-    <a href="{{.Href}}" class="map-node node-{{.State}}">
-      <title>{{.Name}}: {{.State}}</title>
+    <a href="{{.Href}}" class="map-node node-{{.State}}{{if eq .FailedState "active"}} node-attacked{{end}}">
+      <title>{{.Name}}: {{.State}}{{with .Failed}} · {{.}}{{end}}</title>
+      {{if .Failed}}
+      <rect x="{{sub .X 135}}" y="{{sub .Y 30}}" width="270" height="60" rx="10" class="node-box"/>
+      <circle cx="{{sub .X 113}}" cy="{{sub .Y 7}}" r="6" class="node-dot"/>
+      <text x="{{sub .X 98}}" y="{{sub .Y 1}}" class="node-name">{{.Name}}</text>
+      <text x="{{sub .X 98}}" y="{{add .Y 18}}" class="node-failed failed-{{.FailedState}}">{{.Failed}}</text>
+      {{else}}
       <rect x="{{sub .X 135}}" y="{{sub .Y 24}}" width="270" height="48" rx="10" class="node-box"/>
       <circle cx="{{sub .X 113}}" cy="{{.Y}}" r="6" class="node-dot"/>
       <text x="{{sub .X 98}}" y="{{add .Y 6}}" class="node-name">{{.Name}}</text>
+      {{end}}
+      {{if eq .FailedState "active"}}{{template "attackicon" (badge (add .X 110) .Y)}}{{end}}
     </a>
     {{end}}
   </svg>
@@ -44,17 +51,20 @@
       <text x="{{half .NW}}" y="{{if .TailnetNote}}{{sub .NH 46}}{{else}}{{sub .NH 38}}{{end}}" class="bubble-name">Tailnet</text>
       {{with .TailnetNote}}<text x="{{half $.Data.Map.NW}}" y="{{sub $.Data.Map.NH 26}}" class="bubble-note">{{.}}</text>{{end}}
     </g>
+    {{range .Narrow}}{{template "maplink" .Internet}}{{template "maplink" .Tailnet}}{{end}}
+    {{range .Narrow}}{{template "badges" .Internet.Badges}}{{template "badges" .Tailnet.Badges}}{{end}}
     {{range .Narrow}}
-    {{template "maplink" .Internet}}{{template "maplink" .Tailnet}}
-    <a href="{{.Href}}" class="map-node node-{{.State}}">
-      <title>{{.Name}}: {{.State}}</title>
+    <a href="{{.Href}}" class="map-node node-{{.State}}{{if eq .FailedState "active"}} node-attacked{{end}}">
+      <title>{{.Name}}: {{.State}}{{with .Failed}} · {{.}}{{end}}</title>
       <circle cx="{{.X}}" cy="{{.Y}}" r="22" class="node-box"/>
       <circle cx="{{.X}}" cy="{{.Y}}" r="7" class="node-dot"/>
       <text x="{{.X}}" y="{{add .Y 44}}" class="node-name node-name-small">{{.Name}}</text>
+      {{if .FailedShort}}<text x="{{.X}}" y="{{add .Y 60}}" class="node-failed node-failed-small failed-{{.FailedState}}">{{.FailedShort}}</text>{{end}}
+      {{if eq .FailedState "active"}}{{template "attackicon" (badge (add .X 20) (sub .Y 20))}}{{end}}
     </a>
     {{end}}
   </svg>
-  <p class="map-legend"><span class="lg lg-ok"></span>ok <span class="lg lg-warn"></span>warn <span class="lg lg-crit"></span>crit <span class="lg lg-stale"></span>stale <span class="lg lg-none"></span>no data · a line takes the worst check about that side of the host</p>
+  <p class="map-legend"><span class="lg lg-ok"></span>ok <span class="lg lg-warn"></span>warn <span class="lg lg-crit"></span>crit <span class="lg lg-stale"></span>stale <span class="lg lg-none"></span>no data · <span class="lg-chip">22</span> open port <span class="lg-chip lg-chip-bad">8080</span> unexpected <span class="lg-chip lg-chip-closed">443</span> expected, closed · hover for details</p>
 </section>
 {{end}}
 
@@ -120,3 +130,10 @@
 {{end}}
 
 {{define "maplink"}}{{if .On}}<a href="{{or .Href "#"}}" class="map-link link-{{.State}}">{{with .Title}}<title>{{.}}</title>{{end}}<path d="{{.Path}}" class="link-hit"/><path d="{{.Path}}" class="link-line"/></a>{{end}}{{end}}
+
+{{define "badges"}}{{range .}}<a href="{{or .Href "#"}}" class="map-badge mb-{{.Class}}"><title>{{.Title}}</title>{{if .Icon}}<circle cx="{{.X}}" cy="{{.Y}}" r="13" class="badge-bg"/>{{template "mapicon" .}}{{else}}<rect x="{{sub .X (half .W)}}" y="{{sub .Y 10}}" width="{{.W}}" height="20" rx="10" class="chip"/><text x="{{.X}}" y="{{add .Y 4}}" class="chip-text">{{.Chip}}</text>{{end}}</a>{{end}}{{end}}
+
+{{define "attackicon"}}<g class="map-badge mb-active"><circle cx="{{.X}}" cy="{{.Y}}" r="13" class="badge-bg"/>{{template "mapicon" .}}</g>{{end}}
+
+{{/* Icons on a 24-unit grid, drawn at 0.65 around the badge centre. */}}
+{{define "mapicon"}}<g class="map-icon" transform="translate({{sub .X 7.8}} {{sub .Y 7.8}}) scale(0.65)">{{if eq .Icon "link"}}<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>{{else if eq .Icon "clock"}}<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>{{else if eq .Icon "x"}}<path d="M18 6 6 18M6 6l12 12"/>{{else if eq .Icon "lock"}}<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>{{else if eq .Icon "alert"}}<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/>{{else if eq .Icon "target"}}<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M22 12h-4M6 12H2M12 6V2M12 22v-4"/>{{else}}<path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>{{end}}</g>{{end}}
