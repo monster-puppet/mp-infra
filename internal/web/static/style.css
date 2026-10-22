@@ -938,6 +938,19 @@ pre.data {
 
 .map-link:hover .link-line { stroke-width: 4; stroke-opacity: 1; }
 
+/* Other tailnet devices, as small computers in the tailnet bubble. */
+.map-device .map-icon { stroke: var(--ok); stroke-opacity: 0.85; }
+.map-device:hover .map-icon { stroke-opacity: 1; stroke-width: 2.6; }
+.device-hit { fill: transparent; stroke: none; }
+
+/* Host-to-host arcs: thinner than the network lines, arrowhead at the host connected to. */
+.host-link .link-line { stroke-width: 2; }
+.link-arrow { fill: var(--text-muted); fill-opacity: 0.5; }
+.link-ok .link-arrow { fill: var(--ok); fill-opacity: 0.8; }
+.link-warn .link-arrow { fill: var(--warn); fill-opacity: 1; }
+.link-crit .link-arrow { fill: var(--crit); fill-opacity: 1; }
+.link-stale .link-arrow { fill: var(--stale); fill-opacity: 1; }
+
 @keyframes flow { to { stroke-dashoffset: -20; } }
 
 .node-box {
@@ -999,6 +1012,9 @@ pre.data {
 .node-name-small {
   font-size: 12px;
   text-anchor: middle;
+  paint-order: stroke;
+  stroke: #1d1716;
+  stroke-width: 4px;
 }
 
 .map-legend {
@@ -1067,6 +1083,8 @@ pre.data {
 .mb-stale .chip-text { fill: var(--stale); }
 .mb-none .badge-bg { stroke: var(--text-muted); stroke-opacity: 0.5; }
 .mb-none .map-icon { stroke: var(--text-muted); }
+.mb-none .chip { stroke: var(--text-muted); stroke-opacity: 0.5; }
+.mb-none .chip-text { fill: var(--text-muted); }
 
 /* An unexpected open port: solid red. An expected port that is closed: dashed. */
 .mb-bad .chip { fill: var(--crit); stroke: var(--crit); }
@@ -1102,3 +1120,13 @@ pre.data {
 
 .lg-chip-bad { background: var(--crit); border-color: var(--crit); color: var(--on-primary); }
 .lg-chip-closed { border-style: dashed; border-color: var(--warn); color: var(--warn); text-decoration: line-through; }
+
+.lg-arc {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.8rem;
+  margin: 0 0.3rem -0.15rem 0.6rem;
+  border: 2px solid var(--text-muted);
+  border-left: none;
+  border-radius: 0 0.5rem 0.5rem 0;
+}

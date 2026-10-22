@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -15,6 +16,8 @@ import (
 // other, every host in between with a line to each network it is on. A line takes
 // the worst state of the checks about that side of the host, so a brute force or
 // an open port lights up the internet side and a dropped Tailscale the other.
+// Declared links between hosts (links: in the config) are arcs beside the host
+// column: on the tailnet side, or the internet side for a public route.
 // It is plain SVG built here; the template only draws it.
 
 // Which checks colour which line.
@@ -71,15 +74,40 @@ type mapNode struct {
 	FailedHref  string
 }
 
+// hostLink is a declared connection from one host to another.
+type hostLink struct {
+	from, to int // indexes into Nodes
+	public   bool
+	chip     string
+	State    string // the state of the link's check, or none
+	Title    string
+	Href     string
+	Path     string // SVG path from the From host to the To host
+	Arrow    string // arrowhead at the To end
+	Badges   []mapBadge
+}
+
+// mapDevice is another tailnet device, drawn as a small computer in the tailnet
+// bubble.
+type mapDevice struct {
+	X, Y  float64
+	Shape string // monitor, laptop or phone
+	Title string
+}
+
 type mapView struct {
 	Nodes        []mapNode
+	Links        []hostLink
+	Devices      []mapDevice
+	MoreDevices  []mapBadge // "+N" when they do not all fit
 	InternetNote string
 	TailnetNote  string
 	// Wide layout: networks left and right of a host column.
 	W, H float64
 	// Narrow layout (phones): networks above and below a row of hosts.
-	Narrow []mapNode
-	NW, NH float64
+	Narrow      []mapNode
+	NarrowLinks []hostLink
+	NW, NH      float64
 }
 
 const (
@@ -124,6 +152,89 @@ func (m *mapView) layout() {
 		nd.Internet.Badges = nd.Internet.narrowBadge(ix, iy)
 		nd.Tailnet.Badges = nd.Tailnet.narrowBadge(tx, ty)
 	}
+	m.layoutLinks()
+	m.layoutDevices()
+}
+
+// Devices sit in rows of three under the bubble's name and note.
+const devCell, devCols = 30.0, 3
+
+// layoutDevices fills the tailnet bubble with as many devices as fit; the last
+// cell becomes "+N" when some do not.
+func (m *mapView) layoutDevices() {
+	if len(m.Devices) == 0 {
+		return
+	}
+	cx, top := m.W-mapPad-mapBubbleW/2, m.H/2+46
+	// Keep clear of the bubble's rounded bottom.
+	rows := int((m.H-44-top)/devCell) + 1
+	fit := max(0, rows*devCols)
+	if len(m.Devices) > fit {
+		more := len(m.Devices) - (fit - 1)
+		m.Devices = m.Devices[:fit-1]
+		x, y := cell(cx, top, fit-1)
+		chip := fmt.Sprintf("+%d", more)
+		m.MoreDevices = []mapBadge{{X: x, Y: y, W: chipW(chip), Chip: chip, Class: "none",
+			Title: fmt.Sprintf("%d more devices, listed under Tailnet", more), Href: "#tailnet"}}
+	}
+	for i := range m.Devices {
+		m.Devices[i].X, m.Devices[i].Y = cell(cx, top, i)
+	}
+}
+
+func cell(cx, top float64, i int) (float64, float64) {
+	return cx + float64(i%devCols-1)*devCell, top + float64(i/devCols)*devCell
+}
+
+// layoutLinks draws each host link as an arc out of the side of the host column
+// and back, wider the more rows it spans, with its port on the bend. On phones the
+// arcs hang below the row of hosts (above for public ones) and carry no chip.
+func (m *mapView) layoutLinks() {
+	nth := map[[2]int]int{} // arcs already drawn between the same two hosts
+	m.NarrowLinks = make([]hostLink, len(m.Links))
+	for i := range m.Links {
+		l := &m.Links[i]
+		pair := [2]int{min(l.from, l.to), max(l.from, l.to)}
+		k := float64(nth[pair])
+		nth[pair]++
+		span := math.Abs(float64(l.to - l.from))
+
+		a, b := m.Nodes[l.from], m.Nodes[l.to]
+		x, s := (mapW+mapNodeW)/2, 1.0
+		if l.public {
+			x, s = (mapW-mapNodeW)/2, -1
+		}
+		// Leave and arrive beside the host's own network line, toward the other host.
+		y0, y1 := a.Y+12*sign(b.Y-a.Y), b.Y+12*sign(a.Y-b.Y)
+		d := min(52+24*(span-1)+16*k, 150)
+		var mx, my float64
+		l.Path, mx, my = curve(x, y0, x+s*d, y0, x+s*d, y1, x, y1)
+		l.Arrow = fmt.Sprintf("M%.0f %.0f L%.0f %.0f L%.0f %.0f Z", x+s, y1, x+s*10, y1-5, x+s*10, y1+5)
+		if l.chip != "" {
+			l.Badges = []mapBadge{{X: mx, Y: my, W: chipW(l.chip), Chip: l.chip, Class: l.State, Title: l.Title, Href: l.Href}}
+		}
+
+		n := *l
+		n.Badges = nil
+		a, b = m.Narrow[l.from], m.Narrow[l.to]
+		s = 1
+		if l.public {
+			s = -1
+		}
+		dx := 14 * sign(b.X-a.X)
+		ay, by := a.Y+s*17, b.Y+s*17
+		d = min(40+14*(span-1)+12*k, 80)
+		n.Path, _, _ = curve(a.X+dx, ay, a.X+dx, ay+s*d, b.X-dx, by+s*d, b.X-dx, by)
+		n.Arrow = fmt.Sprintf("M%.0f %.0f L%.0f %.0f L%.0f %.0f Z", b.X-dx, by+s, b.X-dx-5, by+s*10, b.X-dx+5, by+s*10)
+		m.NarrowLinks[i] = n
+	}
+}
+
+func sign(v float64) float64 {
+	if v < 0 {
+		return -1
+	}
+	return 1
 }
 
 // bezier returns the point at t on a cubic Bézier.
@@ -233,7 +344,7 @@ func portTitle(p portChip) string {
 }
 
 // buildMap makes the map from the configured hosts and every current check.
-func buildMap(hosts []config.Host, rows []rowView, all []checkView, tn *tailnetView) *mapView {
+func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []checkView, tn *tailnetView) *mapView {
 	if len(hosts) == 0 {
 		return nil
 	}
@@ -313,11 +424,79 @@ func buildMap(hosts []config.Host, rows []rowView, all []checkView, tn *tailnetV
 	if failed > 0 {
 		m.InternetNote = fmt.Sprintf("%s failed logins / 24 h", thousands(failed))
 	}
+	m.Links = hostLinks(m.Nodes, links, all)
 	if tn != nil {
 		m.TailnetNote = fmt.Sprintf("+%d other device%s", len(tn.Online), plural(len(tn.Online)))
+		for _, d := range tn.Online {
+			shape := map[string]string{"laptop": "laptop", "phone": "phone"}[d.OS]
+			if shape == "" {
+				shape = "monitor"
+			}
+			title := d.Name
+			for _, s := range []string{d.OSName, d.Addr, d.Tags} {
+				if s != "" {
+					title += " · " + s
+				}
+			}
+			m.Devices = append(m.Devices, mapDevice{Shape: shape, Title: title})
+		}
 	}
 	m.layout()
 	return m
+}
+
+// hostLinks resolves the declared links against the hosts on the map and colours
+// each from its check. Only a check on one of the two ends, or on serve, counts, so
+// a host's report never colours a link it is not part of.
+func hostLinks(nodes []mapNode, links []config.Link, all []checkView) []hostLink {
+	at := map[string]int{}
+	for i, nd := range nodes {
+		at[nd.Host] = i
+	}
+	var out []hostLink
+	for _, l := range links {
+		from, ok1 := at[l.From]
+		to, ok2 := at[l.To]
+		if !ok1 || !ok2 || from == to {
+			continue
+		}
+		hl := hostLink{from: from, to: to, public: l.Public, chip: l.Label, State: "none"}
+		if hl.chip == "" && l.Port > 0 {
+			hl.chip = fmt.Sprint(l.Port)
+		}
+		hl.Title = nodes[from].Name + " → " + nodes[to].Name
+		if l.Port > 0 {
+			hl.Title += fmt.Sprintf(" :%d", l.Port)
+		}
+		if l.Public {
+			hl.Title += " over the internet"
+		} else {
+			hl.Title += " over the tailnet"
+		}
+		switch c := linkCheck(all, l); {
+		case l.Check == "":
+			hl.Title += "\nno check watches this link"
+		case c == nil:
+			hl.Title += "\n" + l.Check + ": no data yet"
+		default:
+			hl.State, hl.Href = string(c.Effective), checkURL(c.Host, c.ID)
+			hl.Title += "\n" + shortID(c.Host, c.ID) + ": " + c.Summary
+		}
+		out = append(out, hl)
+	}
+	return out
+}
+
+func linkCheck(all []checkView, l config.Link) *checkView {
+	if l.Check == "" {
+		return nil
+	}
+	for i, c := range all {
+		if c.ID == l.Check && (c.Host == l.From || c.Host == l.To || c.Host == config.ServeHost) {
+			return &all[i]
+		}
+	}
+	return nil
 }
 
 // summarize sets the line's state, tooltip and link from the worst of cs.

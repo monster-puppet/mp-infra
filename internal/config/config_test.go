@@ -27,6 +27,9 @@ func TestLoadServerExample(t *testing.T) {
 	if len(c.Hosts) != 3 || c.StaleAfter != 15*time.Minute {
 		t.Fatalf("got %d hosts, stale_after %s", len(c.Hosts), c.StaleAfter)
 	}
+	if len(c.Links) != 2 || !c.Links[1].Public || c.Links[1].Check != "jenkins.agent.windows" {
+		t.Fatalf("links: %+v", c.Links)
+	}
 	if h, _ := c.HostByName("jenkins-win"); h.DisplayName() != "Windows build agent" || OSFamily(h.OS) != "windows" {
 		t.Fatalf("jenkins-win: %+v", h)
 	}
@@ -43,6 +46,11 @@ func TestLoadServerRejects(t *testing.T) {
 		"hosts: [{name: a, os: beos}]",
 		"hosts: [{name: a, label: ' padded'}]",
 		"hosts: [{name: a, label: " + strings.Repeat("x", 41) + "}]",
+		// links: unknown host, a loop, a bad port, a long label
+		"hosts: [{name: a}]\nlinks: [{from: a, to: b}]",
+		"hosts: [{name: a}]\nlinks: [{from: a, to: a}]",
+		"hosts: [{name: a}, {name: b}]\nlinks: [{from: a, to: b, port: 70000}]",
+		"hosts: [{name: a}, {name: b}]\nlinks: [{from: a, to: b, label: thirteen-char}]",
 		// google_login: missing env names, no allow list, http base_url, base_url with a path
 		"base_url: https://ui.example.ts.net\ngoogle_login: {client_id: x, allowed_domain: example.com}",
 		"base_url: https://ui.example.ts.net\ngoogle_login: {client_id: x, client_secret_env: S, session_key_env: K}",

@@ -406,7 +406,7 @@ func TestNetMap(t *testing.T) {
 		cv("a", "ts.online.a", eval.OK),
 		cv("a", "disk.a.root", eval.Warn),
 	}
-	m := buildMap(hosts, nil, all, nil)
+	m := buildMap(hosts, nil, nil, all, nil)
 	a, b := m.Nodes[0], m.Nodes[1]
 	if a.Internet.State != "crit" || a.Internet.Href != "/check/a/auth.logins.a" || a.Tailnet.State != "ok" {
 		t.Errorf("a: %+v", a)
@@ -416,5 +416,58 @@ func TestNetMap(t *testing.T) {
 	}
 	if len(m.Narrow) != 2 || m.H <= 0 || a.Internet.Path == "" {
 		t.Errorf("layout: %+v", m)
+	}
+}
+
+func TestNetMapLinks(t *testing.T) {
+	hosts := []config.Host{{Name: "a"}, {Name: "b"}, {Name: "c"}}
+	links := []config.Link{
+		{From: "a", To: "c", Port: 1666},
+		{From: "b", To: "a", Port: 50001, Public: true, Check: "jenkins.agent.b"},
+		{From: "c", To: "b", Check: "x.y"},        // its check sits on a, not an end
+		{From: "a", To: "gone", Label: "ignored"}, // not on the map
+	}
+	all := []checkView{
+		{Check: store.Check{Host: "b", ID: "jenkins.agent.b", Summary: "agent b offline"}, Effective: eval.Warn},
+		{Check: store.Check{Host: "a", ID: "x.y"}, Effective: eval.Crit},
+	}
+	m := buildMap(hosts, links, nil, all, nil)
+	if len(m.Links) != 3 || len(m.NarrowLinks) != 3 {
+		t.Fatalf("links: %+v", m.Links)
+	}
+	ac, ba, cb := m.Links[0], m.Links[1], m.Links[2]
+	if ac.State != "none" || len(ac.Badges) != 1 || ac.Badges[0].Chip != "1666" || !strings.Contains(ac.Title, "a → c :1666 over the tailnet") {
+		t.Errorf("a->c: %+v", ac)
+	}
+	if ba.State != "warn" || ba.Href != "/check/b/jenkins.agent.b" || !strings.Contains(ba.Title, "agent b offline") {
+		t.Errorf("b->a: %+v", ba)
+	}
+	if cb.State != "none" || cb.Href != "" || len(cb.Badges) != 0 {
+		t.Errorf("c->b took a check from a host it does not touch: %+v", cb)
+	}
+	// Tailnet arcs bulge right of the column, public ones left; both arrive at To.
+	if !strings.HasPrefix(ac.Path, "M635 ") || !strings.HasPrefix(ba.Path, "M365 ") || ac.Arrow == "" || m.NarrowLinks[0].Badges != nil {
+		t.Errorf("layout: %q %q %+v", ac.Path, ba.Path, m.NarrowLinks[0])
+	}
+}
+
+func TestNetMapDevices(t *testing.T) {
+	hosts := []config.Host{{Name: "a"}, {Name: "b"}, {Name: "c"}}
+	tn := &tailnetView{}
+	for _, os := range []string{"laptop", "phone", "windows", "linux", "device", "laptop", "phone", "linux", "linux", "linux", "linux", "linux"} {
+		tn.Online = append(tn.Online, deviceView{Name: "d", OS: os, OSName: os, Addr: "100.64.0.1"})
+	}
+	m := buildMap(hosts, nil, nil, nil, tn)
+	// Three rows of three fit in a three-host bubble: eight devices and "+4".
+	if len(m.Devices) != 8 || len(m.MoreDevices) != 1 || m.MoreDevices[0].Chip != "+4" {
+		t.Fatalf("devices %d, more %+v", len(m.Devices), m.MoreDevices)
+	}
+	if m.Devices[0].Shape != "laptop" || m.Devices[1].Shape != "phone" || m.Devices[2].Shape != "monitor" || m.Devices[0].Title != "d · laptop · 100.64.0.1" {
+		t.Errorf("shapes: %+v", m.Devices[:3])
+	}
+	for _, d := range m.Devices {
+		if d.X < m.W-mapPad-mapBubbleW || d.X > m.W-mapPad || d.Y > m.H-30 {
+			t.Errorf("device outside the bubble: %+v (map %vx%v)", d, m.W, m.H)
+		}
 	}
 }

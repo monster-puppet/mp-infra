@@ -27,12 +27,14 @@ var versionName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 // Server is the config of `mpinfra serve`. Sections for later phases (tls, tailscale,
 // jenkins, alerts) are accepted and ignored until their phase lands.
 type Server struct {
-	UIAddr          string        `yaml:"ui_addr"`
-	ReportAddr      string        `yaml:"report_addr"`
-	DB              string        `yaml:"db"`
-	StaleAfter      time.Duration `yaml:"stale_after"`
-	Hosts           []Host        `yaml:"hosts"`
-	ReportTokensEnv string        `yaml:"report_tokens_env"`
+	UIAddr     string        `yaml:"ui_addr"`
+	ReportAddr string        `yaml:"report_addr"`
+	DB         string        `yaml:"db"`
+	StaleAfter time.Duration `yaml:"stale_after"`
+	Hosts      []Host        `yaml:"hosts"`
+	// Links are the connections hosts make to each other, drawn on the network map.
+	Links           []Link `yaml:"links"`
+	ReportTokensEnv string `yaml:"report_tokens_env"`
 	// MCPTokensEnv names the env var holding the MCP clients' token hashes. Unset or
 	// empty: no /mcp endpoint.
 	MCPTokensEnv string `yaml:"mcp_tokens_env"`
@@ -88,6 +90,21 @@ type Host struct {
 	NotOnTailnet bool `yaml:"not_on_tailnet"`
 	// NoReport marks a host that runs no agent, so it never goes stale.
 	NoReport bool `yaml:"no_report"`
+}
+
+// Link is a connection one host is known to make to another. It is declared, not
+// observed: the map draws it whether or not traffic flows, and colours it from
+// Check when set.
+type Link struct {
+	From  string `yaml:"from"`
+	To    string `yaml:"to"`
+	Port  int    `yaml:"port"`
+	Label string `yaml:"label"` // shown on the line instead of the port
+	// Public: the connection goes over the internet, not the tailnet.
+	Public bool `yaml:"public"`
+	// Check is the id of a check on either end, or on serve, that says whether the
+	// link works (jenkins.agent.windows for jenkins-win -> jenkins).
+	Check string `yaml:"check"`
 }
 
 // Thresholds for server-side checks. Zero values take the spec defaults.
@@ -225,7 +242,26 @@ func LoadServer(path string) (*Server, error) {
 			return nil, fmt.Errorf("%s: host %s: %w", path, h.Name, err)
 		}
 	}
+	for i, l := range c.Links {
+		if err := l.check(seen); err != nil {
+			return nil, fmt.Errorf("%s: links[%d]: %w", path, i, err)
+		}
+	}
 	return &c, nil
+}
+
+func (l Link) check(hosts map[string]bool) error {
+	switch {
+	case !hosts[l.From] || !hosts[l.To]:
+		return fmt.Errorf("from %q and to %q must both be listed under hosts", l.From, l.To)
+	case l.From == l.To:
+		return errors.New("from and to are the same host")
+	case l.Port < 0 || l.Port > 65535:
+		return fmt.Errorf("bad port %d", l.Port)
+	case utf8.RuneCountInString(l.Label) > 12:
+		return errors.New("label must be at most 12 characters")
+	}
+	return CheckHostMeta(l.Label, "")
 }
 
 // MaxLabel is the longest host label, in characters.

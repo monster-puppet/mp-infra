@@ -517,7 +517,7 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 		}
 		d.Hosts = append(d.Hosts, row)
 	}
-	d.Map = buildMap(hosts, d.Hosts, all, d.Tailnet)
+	d.Map = buildMap(hosts, w.srv.Cfg.Links, d.Hosts, all, d.Tailnet)
 	sortRows(d.Hosts)
 	for _, g := range groups {
 		var cs []checkView

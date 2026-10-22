@@ -36,6 +36,21 @@ hosts:
   #   expected_public_ports: [22, 1666]
   #   not_on_tailnet: true
 
+# Connections hosts make to each other, drawn as arcs on the network map with an
+# arrow at the host connected to. They are declared here, not observed. check
+# names a check on either end (or on serve) that colours the arc; without one it
+# stays grey. public: the route goes over the internet, so the arc is drawn on
+# that side. label replaces the port on the arc (at most 12 characters).
+links:
+  - from: jenkins
+    to: monster-p4
+    port: 1666
+  - from: jenkins-win
+    to: jenkins
+    port: 50001
+    public: true                 # the agent uses the public Jenkins URL on purpose
+    check: jenkins.agent.windows
+
 # Ports connect-scanned on every public_ip, plus each host's expected ports.
 # scan_ports: [21, 22, 23, 25, 53, 80, 443, 1666, 3389, 5985, 8080, 50000, 50001]
 
