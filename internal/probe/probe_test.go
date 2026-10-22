@@ -179,6 +179,8 @@ func TestTailscale(t *testing.T) {
 		{"hostname": "old-laptop", "connectedToControl": false, "lastSeen": t0.Add(-40 * 24 * time.Hour)},
 		{"hostname": "marcus-phone", "connectedToControl": true, "lastSeen": t0,
 			"clientConnectivity": map[string]any{"endpoints": []string{"203.0.113.7:41641", "192.168.1.20:41641", "[2001:db8::7]:41641", "203.0.113.7:1234", "100.64.0.3:1", "junk"}}},
+		{"hostname": "DESKTOP-4KQ2", "name": "studio-pc.tail.ts.net", "connectedToControl": true, "lastSeen": t0},
+		{"hostname": "Marcuss-iPad", "name": "ipad-renamed.tail.ts.net.", "connectedToControl": true, "lastSeen": t0},
 		{"hostname": "stranger", "connectedToControl": true, "lastSeen": t0, "os": "macOS", "addresses": []string{"100.64.0.9", "fd7a::9"}},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -207,7 +209,7 @@ func TestTailscale(t *testing.T) {
 	p := newProber(t, &config.Server{
 		Hosts: []config.Host{{Name: "monster-p4"}, {Name: "jenkins"}, {Name: "jenkins-win"}, {Name: "missing"}, {Name: "p4-game", NotOnTailnet: true}},
 		Tailscale: config.Tailscale{ClientIDEnv: "TS_ID", ClientSecretEnv: "TS_SECRET", APIURL: srv.URL,
-			Devices: map[string]string{"jenkins-win": "WIN-AWS"}, ExpectedDevices: []string{"marcus-phone", "old-laptop"}},
+			Devices: map[string]string{"jenkins-win": "WIN-AWS"}, ExpectedDevices: []string{"marcus-phone", "old-laptop", "IPAD-renamed"}},
 	})
 	cs := p.tailscaleChecks(context.Background())
 	want := map[string]eval.State{
@@ -237,6 +239,10 @@ func TestTailscale(t *testing.T) {
 	if !strings.Contains(d.Summary, "stranger") || !strings.Contains(d.Summary, "old-laptop") {
 		t.Errorf("devices: %s", d.Summary)
 	}
+	// A renamed device is reported by its Tailscale name and may be expected by it.
+	if !strings.Contains(d.Summary, "studio-pc") || strings.Contains(d.Summary, "DESKTOP-4KQ2") || strings.Contains(d.Summary, "ipad") {
+		t.Errorf("renamed devices: %s", d.Summary)
+	}
 	list := d.Data.(map[string]any)["devices"].([]TSDevice)
 	if len(list) != len(devices) {
 		t.Fatalf("device list: %+v", list)
@@ -250,6 +256,14 @@ func TestTailscale(t *testing.T) {
 		case "marcus-phone":
 			if got := strings.Join(dv.PublicIPs, " "); got != "203.0.113.7 2001:db8::7" {
 				t.Errorf("marcus-phone public IPs: %q", got)
+			}
+		case "DESKTOP-4KQ2":
+			if dv.Machine != "studio-pc" {
+				t.Errorf("machine name: %+v", dv)
+			}
+		case "Marcuss-iPad":
+			if dv.Machine != "ipad-renamed" {
+				t.Errorf("machine name: %+v", dv)
 			}
 		case "WIN-AWS":
 			if dv.Host != "jenkins-win" {

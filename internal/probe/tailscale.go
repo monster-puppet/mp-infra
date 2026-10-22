@@ -32,7 +32,10 @@ type tsDevice struct {
 
 // TSDevice is one tailnet device as listed in the data of ts.devices.
 type TSDevice struct {
-	Name      string    `json:"name"`
+	Name string `json:"name"` // the OS hostname
+	// Machine is the device's name in Tailscale, the first label of its MagicDNS
+	// name. It is the hostname unless the device was renamed in the admin console.
+	Machine   string    `json:"machine,omitempty"`
 	OS        string    `json:"os"`
 	Addr      string    `json:"addr"`
 	Connected bool      `json:"connected"`
@@ -42,6 +45,13 @@ type TSDevice struct {
 	// PublicIPs are the device's public endpoint addresses, its NAT's address for a
 	// laptop at home. A login from one of them is that device going around the VPN.
 	PublicIPs []string `json:"public_ips,omitempty"`
+}
+
+// machineName is the first label of a MagicDNS name: "my-laptop" for
+// "my-laptop.tailnet.ts.net".
+func machineName(dns string) string {
+	n, _, _ := strings.Cut(strings.TrimSuffix(dns, "."), ".")
+	return n
 }
 
 var tsRange = netip.MustParsePrefix("100.64.0.0/10")
@@ -201,24 +211,30 @@ func (p *Prober) evalTailscale(devices []tsDevice) []Check {
 		}
 		out = append(out, key)
 	}
+	expected := map[string]bool{}
 	for _, e := range p.cfg.Tailscale.ExpectedDevices {
-		known[strings.ToLower(e)] = true
+		expected[strings.ToLower(e)] = true
 	}
 	var unknown, unseen []string
 	list := make([]TSDevice, 0, len(devices))
 	for _, d := range devices {
-		n := strings.ToLower(d.Hostname)
-		td := TSDevice{Name: d.Hostname, OS: d.OS, Connected: d.ConnectedToControl, LastSeen: d.LastSeen, Tags: d.Tags, Host: hostOf[n],
+		n, m := strings.ToLower(d.Hostname), machineName(d.Name)
+		label := d.Hostname
+		if m != "" {
+			label = m
+		}
+		td := TSDevice{Name: d.Hostname, Machine: m, OS: d.OS, Connected: d.ConnectedToControl, LastSeen: d.LastSeen, Tags: d.Tags, Host: hostOf[n],
 			PublicIPs: publicIPs(d.ClientConnectivity.Endpoints)}
 		if len(d.Addresses) > 0 {
 			td.Addr = d.Addresses[0]
 		}
 		list = append(list, td)
-		if !known[n] {
-			unknown = append(unknown, d.Hostname)
+		// An expected device may be listed by its hostname or its Tailscale name.
+		if !known[n] && !expected[n] && !expected[strings.ToLower(m)] {
+			unknown = append(unknown, label)
 		}
 		if !d.ConnectedToControl && days(now.Sub(d.LastSeen)) > th.TSDeviceUnseenDays {
-			unseen = append(unseen, d.Hostname)
+			unseen = append(unseen, label)
 		}
 	}
 	sort.Strings(unknown)

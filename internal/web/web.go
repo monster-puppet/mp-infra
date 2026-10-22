@@ -407,6 +407,13 @@ func tailnet(c checkView, now time.Time) *tailnetView {
 	if json.Unmarshal([]byte(c.Data), &data) != nil || len(data.Devices) == 0 {
 		return nil
 	}
+	// Show the name the device has in Tailscale; data stored before it was
+	// recorded only has the hostname.
+	for i, d := range data.Devices {
+		if d.Machine != "" {
+			data.Devices[i].Name = d.Machine
+		}
+	}
 	sort.Slice(data.Devices, func(i, j int) bool {
 		return strings.ToLower(data.Devices[i].Name) < strings.ToLower(data.Devices[j].Name)
 	})

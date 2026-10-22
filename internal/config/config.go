@@ -153,8 +153,9 @@ type Tailscale struct {
 	Tailnet         string `yaml:"tailnet"` // "-" = the OAuth client's tailnet
 	// Devices maps a host name to its Tailscale device hostname when they differ.
 	Devices map[string]string `yaml:"devices"`
-	// ExpectedDevices are device hostnames that may be on the tailnet besides the
-	// hosts (laptops, phones). Anything else shows up in ts.devices.
+	// ExpectedDevices are devices that may be on the tailnet besides the hosts
+	// (laptops, phones), by hostname or by their name in Tailscale. Anything else
+	// shows up in ts.devices.
 	ExpectedDevices []string `yaml:"expected_devices"`
 	APIURL          string   `yaml:"api_url"`
 }
