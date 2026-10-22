@@ -47,6 +47,42 @@ func (s *Store) Unack(ctx context.Context, host, id string) error {
 	return err
 }
 
+// HostMeta is a host's label and OS as set in the UI.
+type HostMeta struct {
+	Label, OS, By string
+	At            time.Time
+}
+
+// HostMetas returns every host's UI-set label and OS, by host.
+func (s *Store) HostMetas(ctx context.Context) (map[string]HostMeta, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT host, label, os, by, at FROM host_meta`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]HostMeta{}
+	for rows.Next() {
+		var host string
+		var m HostMeta
+		var at int64
+		if err := rows.Scan(&host, &m.Label, &m.OS, &m.By, &at); err != nil {
+			return nil, err
+		}
+		m.At = time.Unix(at, 0).UTC()
+		out[host] = m
+	}
+	return out, rows.Err()
+}
+
+// SetHostMeta stores a host's label and OS.
+func (s *Store) SetHostMeta(ctx context.Context, host string, m HostMeta) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO host_meta(host, label, os, by, at) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(host) DO UPDATE SET label = excluded.label, os = excluded.os, by = excluded.by, at = excluded.at`,
+		host, m.Label, m.OS, m.By, m.At.Unix())
+	return err
+}
+
 // Baseline returns the accepted value of a drift check.
 func (s *Store) Baseline(ctx context.Context, host, id string) (value string, at time.Time, ok bool, err error) {
 	var ts int64

@@ -12,7 +12,8 @@ base_url: "http://TAILNET_IP:8098"   # for links in alerts
 hosts:
 # name is the host's identity (agent config, report token, check ids) and never
 # changes. label is what the UI shows instead; os picks its icon: rocky, centos,
-# ubuntu, debian, linux or windows. Both are optional.
+# ubuntu, debian, linux or windows. Both are optional, and both can be set in the
+# UI (pencil on the host card); what is set there wins over this file.
   - name: monster-p4
     label: "Perforce"
     os: rocky

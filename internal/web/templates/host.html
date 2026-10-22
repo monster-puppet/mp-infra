@@ -1,0 +1,23 @@
+{{define "content"}}{{with .Data}}
+<p class="crumbs"><a href="/">Status</a> / <a href="/history?host={{.Host.Name}}">{{.Host.DisplayName}}</a></p>
+<h1>{{.Host.DisplayName}}</h1>
+{{if .Flash}}<p class="status status-warn">{{.Flash}}</p>{{end}}
+<section class="card">
+  <h2>Display</h2>
+  <form method="post" action="/host/{{pathEsc .Host.Name}}" class="ack-form">
+    <div class="form-group grow">
+      <label for="label">Name shown</label>
+      <input id="label" name="label" value="{{.Host.Label}}" maxlength="{{.MaxLabel}}" placeholder="{{.Host.Name}}">
+    </div>
+    <div class="form-group">
+      <label for="os">Operating system</label>
+      <select id="os" name="os">
+        <option value="">None</option>
+        {{$cur := .Host.OS}}{{range .OSList}}<option value="{{.}}"{{if eq . $cur}} selected{{end}}>{{osName .}}</option>{{end}}
+      </select>
+    </div>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </form>
+  <p class="help">Only changes how the host looks here. Its name, <span class="mono">{{.Host.Name}}</span>, stays the same for reports, tokens and alerts. Leave the name empty to show <span class="mono">{{.Host.Name}}</span>.{{if .Changed}} Last changed {{.Changed}}.{{end}}</p>
+</section>
+{{end}}{{end}}

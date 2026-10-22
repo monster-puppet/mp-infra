@@ -712,3 +712,22 @@ pre.data {
 .muted {
   color: var(--text-muted);
 }
+
+.row-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: none;
+}
+
+.edit-link {
+  display: inline-flex;
+  padding: 0.3rem;
+  border-radius: 6px;
+  color: var(--text-muted);
+}
+
+.edit-link:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}

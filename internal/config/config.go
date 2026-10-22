@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
@@ -213,15 +214,34 @@ func LoadServer(path string) (*Server, error) {
 			return nil, fmt.Errorf("%s: duplicate host %q", path, h.Name)
 		}
 		seen[h.Name] = true
-		if utf8.RuneCountInString(h.Label) > 40 || strings.TrimSpace(h.Label) != h.Label {
-			return nil, fmt.Errorf("%s: host %s: label must be at most 40 characters, without surrounding spaces", path, h.Name)
-		}
-		if h.OS != "" && OSNames[h.OS] == "" {
-			return nil, fmt.Errorf("%s: host %s: unknown os %q", path, h.Name, h.OS)
+		if err := CheckHostMeta(h.Label, h.OS); err != nil {
+			return nil, fmt.Errorf("%s: host %s: %w", path, h.Name, err)
 		}
 	}
 	return &c, nil
 }
+
+// MaxLabel is the longest host label, in characters.
+const MaxLabel = 40
+
+// CheckHostMeta validates a host label and os, from the config or the UI.
+func CheckHostMeta(label, os string) error {
+	if utf8.RuneCountInString(label) > MaxLabel || strings.TrimSpace(label) != label || !utf8.ValidString(label) {
+		return fmt.Errorf("label must be at most %d characters, without surrounding spaces", MaxLabel)
+	}
+	for _, r := range label {
+		if unicode.IsControl(r) {
+			return errors.New("label must not contain control characters")
+		}
+	}
+	if os != "" && OSNames[os] == "" {
+		return fmt.Errorf("unknown os %q", os)
+	}
+	return nil
+}
+
+// OSList is the os values in the order the UI offers them.
+var OSList = []string{"rocky", "centos", "ubuntu", "debian", "linux", "windows"}
 
 // OSNames maps the allowed values of a host's os to the name the UI shows.
 var OSNames = map[string]string{

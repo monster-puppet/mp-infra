@@ -88,6 +88,15 @@ CREATE TABLE IF NOT EXISTS seen (
 	PRIMARY KEY (host, check_id, key)
 );
 
+-- Label and OS of a host as set in the UI. A row replaces both config values.
+CREATE TABLE IF NOT EXISTS host_meta (
+	host  TEXT    PRIMARY KEY,
+	label TEXT    NOT NULL,
+	os    TEXT    NOT NULL,
+	by    TEXT    NOT NULL,
+	at    INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS kv (
 	key   TEXT PRIMARY KEY,
 	value TEXT NOT NULL

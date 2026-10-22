@@ -287,3 +287,47 @@ func TestHostLabels(t *testing.T) {
 		t.Error("history filter does not show the label")
 	}
 }
+
+func TestEditHost(t *testing.T) {
+	e := setup(t)
+	same := map[string]string{"Sec-Fetch-Site": "same-origin"}
+	post := func(host string, v url.Values, h map[string]string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		e.ui.ServeHTTP(rec, form("/host/"+host, v, h))
+		return rec
+	}
+	if rec := e.get("/host/jenkins-win"); rec.Code != 200 || !strings.Contains(rec.Body.String(), `name="label"`) {
+		t.Fatalf("edit page: %d", rec.Code)
+	}
+	if rec := e.get("/host/serve"); rec.Code != 404 {
+		t.Errorf("serve edit page: %d", rec.Code)
+	}
+	if rec := post("jenkins-win", url.Values{"label": {"x"}}, map[string]string{"Sec-Fetch-Site": "cross-site"}); rec.Code != 403 {
+		t.Errorf("cross-site save: %d", rec.Code)
+	}
+	if rec := post("nope", url.Values{"label": {"x"}}, same); rec.Code != 404 {
+		t.Errorf("unknown host: %d", rec.Code)
+	}
+	for _, bad := range []url.Values{{"os": {"beos"}}, {"label": {strings.Repeat("x", 41)}}, {"label": {"a\x00b"}}} {
+		if rec := post("jenkins-win", bad, same); !strings.Contains(rec.Header().Get("Location"), "Not+saved") {
+			t.Errorf("%v accepted: %d %s", bad, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+	if rec := post("jenkins-win", url.Values{"label": {"  Build <agent>  "}, "os": {"windows"}}, same); rec.Code != http.StatusSeeOther {
+		t.Fatalf("save: %d %s", rec.Code, rec.Body.String())
+	}
+	h := e.get("/").Body.String()
+	if !strings.Contains(h, "Build &lt;agent&gt;") || !strings.Contains(h, "os-windows") || !strings.Contains(h, `href="/host/jenkins-win"`) {
+		t.Error("home does not show the saved label and OS")
+	}
+	// The change survives a restart of serve.
+	if New(e.srv, nil).label("jenkins-win") != "Build <agent>" {
+		t.Error("label not persisted")
+	}
+	// An empty label falls back to the host name, even over a config label.
+	e.srv.Cfg.Hosts[2].Label = "from config"
+	post("jenkins-win", url.Values{"label": {""}}, same)
+	if got := New(e.srv, nil).label("jenkins-win"); got != "jenkins-win" {
+		t.Errorf("label = %q", got)
+	}
+}

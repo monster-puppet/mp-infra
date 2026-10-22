@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/monster-puppet/mp-infra/internal/config"
@@ -39,6 +40,9 @@ type Web struct {
 	who    Whoiser
 	google *GoogleAuth // nil: no sign-in, the tailnet ACL is the only gate
 	pages  map[string]*template.Template
+
+	mu   sync.RWMutex
+	meta map[string]store.HostMeta // labels and OS set in the UI, by host
 }
 
 // New builds the handlers. who may be nil (viewer shown as their address).
@@ -46,15 +50,21 @@ func New(srv *server.Server, who Whoiser) *Web {
 	if who == nil {
 		who = noWhois{}
 	}
-	w := &Web{srv: srv, who: who, pages: map[string]*template.Template{}}
+	w := &Web{srv: srv, who: who, pages: map[string]*template.Template{}, meta: map[string]store.HostMeta{}}
+	if m, err := srv.Store.HostMetas(context.Background()); err != nil {
+		log.Printf("host labels: %v", err)
+	} else {
+		w.meta = m
+	}
 	funcs := template.FuncMap{
 		"ago":      func(t time.Time) string { return ago(srv.Now(), t) },
 		"date":     func(t time.Time) string { return t.Local().Format("2006-01-02 15:04") },
 		"checkURL": checkURL,
 		"pathEsc":  url.PathEscape,
 		"label":    w.label,
+		"osName":   func(os string) string { return config.OSNames[os] },
 	}
-	for _, page := range []string{"home", "check", "history", "error", "signin"} {
+	for _, page := range []string{"home", "check", "history", "error", "signin", "host"} {
 		w.pages[page] = template.Must(template.New("layout.html").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", "templates/"+page+".html"))
 	}
 	return w
@@ -64,9 +74,32 @@ func New(srv *server.Server, who Whoiser) *Web {
 // Call it before UI.
 func (w *Web) RequireGoogle(g *GoogleAuth) { w.google = g }
 
-// label is the name the UI shows for a host: its configured label, else its name.
+// hosts returns the configured hosts with the labels and OS set in the UI applied.
+func (w *Web) hosts() []config.Host {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	out := make([]config.Host, len(w.srv.Cfg.Hosts))
+	for i, h := range w.srv.Cfg.Hosts {
+		if m, ok := w.meta[h.Name]; ok {
+			h.Label, h.OS = m.Label, m.OS
+		}
+		out[i] = h
+	}
+	return out
+}
+
+func (w *Web) host(name string) (config.Host, bool) {
+	for _, h := range w.hosts() {
+		if h.Name == name {
+			return h, true
+		}
+	}
+	return config.Host{}, false
+}
+
+// label is the name the UI shows for a host: its label, else its name.
 func (w *Web) label(host string) string {
-	if h, ok := w.srv.Cfg.HostByName(host); ok {
+	if h, ok := w.host(host); ok {
 		return h.DisplayName()
 	}
 	return host
@@ -90,6 +123,8 @@ func (w *Web) UI() http.Handler {
 	mux.HandleFunc("POST /check/{host}/{id}/unack", w.sameOrigin(w.unack))
 	mux.HandleFunc("POST /check/{host}/{id}/accept", w.sameOrigin(w.accept))
 	mux.HandleFunc("GET /history", w.history)
+	mux.HandleFunc("GET /host/{host}", w.hostPage)
+	mux.HandleFunc("POST /host/{host}", w.sameOrigin(w.saveHost))
 	if w.google == nil {
 		return w.logged(secure(mux))
 	}
@@ -260,6 +295,7 @@ type checkView struct {
 type rowView struct {
 	Name   string
 	Host   string // the host's name on a host row, "" on a group row
+	Edit   string // link to the host's settings
 	OS     string // icon family, see config.OSFamily
 	OSName string
 	Link   string
@@ -353,9 +389,10 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 		all = append(all, v)
 	}
 	d := homeData{Overall: eval.OK, Empty: len(checks) == 0}
-	for _, h := range w.srv.Cfg.Hosts {
+	for _, h := range w.hosts() {
 		row := newRow(h.DisplayName(), byHost[h.Name])
 		row.Host, row.OS, row.OSName = h.Name, config.OSFamily(h.OS), config.OSNames[h.OS]
+		row.Edit = "/host/" + url.PathEscape(h.Name)
 		row.Link = "/history?host=" + url.QueryEscape(h.Name)
 		switch {
 		case h.NoReport:
@@ -507,6 +544,52 @@ func (w *Web) accept(rw http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("firewall %s/%s accepted by %q", host, id, viewer(r))
 	w.back(rw, r, "")
+}
+
+type hostData struct {
+	Host     config.Host
+	OSList   []string
+	MaxLabel int
+	Changed  string // who set the label and OS in the UI, and when
+	Flash    string
+}
+
+func (w *Web) hostPage(rw http.ResponseWriter, r *http.Request) {
+	h, ok := w.host(r.PathValue("host"))
+	if !ok {
+		w.fail(rw, r, 404, "No such host.")
+		return
+	}
+	d := hostData{Host: h, OSList: config.OSList, MaxLabel: config.MaxLabel, Flash: r.URL.Query().Get("msg")}
+	w.mu.RLock()
+	if m, ok := w.meta[h.Name]; ok {
+		d.Changed = "by " + m.By + " " + ago(w.srv.Now(), m.At)
+	}
+	w.mu.RUnlock()
+	w.render(rw, r, "host", 200, page{Title: h.DisplayName(), Section: "home", Data: d})
+}
+
+func (w *Web) saveHost(rw http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("host")
+	if !w.srv.Cfg.HasHost(name) {
+		w.fail(rw, r, 404, "No such host.")
+		return
+	}
+	label, os := strings.TrimSpace(r.FormValue("label")), r.FormValue("os")
+	if err := config.CheckHostMeta(label, os); err != nil {
+		http.Redirect(rw, r, "/host/"+url.PathEscape(name)+"?msg="+url.QueryEscape("Not saved: "+err.Error()), http.StatusSeeOther)
+		return
+	}
+	m := store.HostMeta{Label: label, OS: os, By: viewer(r), At: w.srv.Now()}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if err := w.srv.Store.SetHostMeta(r.Context(), name, m); err != nil {
+		w.fail(rw, r, 500, err.Error())
+		return
+	}
+	w.meta[name] = m
+	log.Printf("host %s: label %q os %q set by %q", name, label, os, m.By)
+	http.Redirect(rw, r, "/", http.StatusSeeOther)
 }
 
 type historyData struct {
