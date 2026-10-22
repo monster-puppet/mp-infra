@@ -90,10 +90,12 @@ for pair in "$@"; do
 done
 { grep -v "^$var=" "$f" || true; echo "$var=$new"; } > "$f.tmp"
 chown --reference="$f" "$f.tmp"; chmod --reference="$f" "$f.tmp"; mv "$f.tmp" "$f"
+since=$(date '+%Y-%m-%d %H:%M:%S')
 systemctl restart mpinfra
 sleep 2
 systemctl is-active --quiet mpinfra || { journalctl -u mpinfra -n 20 --no-pager; exit 1; }
-if journalctl -u mpinfra -n 20 --no-pager | grep -q 'no report tokens'; then
+# Only this start's lines: an older "no report tokens" warning must not fail the run.
+if journalctl -u mpinfra --since "$since" --no-pager | grep -q 'no report tokens'; then
   echo "the server says it has no report tokens: check $f and the unit's EnvironmentFile"; exit 1
 fi
 echo "server restarted with tokens for: $(printf '%s\n' "$new" | tr ',' '\n' | cut -d= -f1 | paste -sd' ' -)"
@@ -117,7 +119,9 @@ enroll_linux() {
 enroll_windows() {
   local name=$1 target=$2 tok=$3 script
   ssh "$target" "powershell -NoProfile -NonInteractive -EncodedCommand $(printf '%s' "New-Item -ItemType Directory -Force C:\\ProgramData\\mp-infra | Out-Null" | ps_encode)"
-  scp -q "$WIN_BIN" "$target:C:/ProgramData/mp-infra/mpinfra.exe"
+  # -O: legacy scp protocol. Win32-OpenSSH often has no working sftp subsystem,
+  # which is what plain scp uses ("scp: Connection closed").
+  scp -O -q "$WIN_BIN" "$target:C:/ProgramData/mp-infra/mpinfra.exe"
   script=$(cat <<PS
 \$ErrorActionPreference = 'Stop'
 \$d = 'C:\\ProgramData\\mp-infra'
@@ -128,7 +132,10 @@ server_url: "$SERVER_URL"
 token: "$tok"
 disks: ['C:\\']
 "@ | Set-Content -Encoding ascii "\$d\\agent.yaml"
-icacls \$d /inheritance:r /grant SYSTEM:F /grant Administrators:F | Out-Null
+# (OI)(CI) so the files inside inherit it; without them SYSTEM cannot read agent.yaml.
+# Folder only: /T would strip the files' inherited ACEs and leave them unreadable.
+icacls \$d /inheritance:r /grant 'SYSTEM:(OI)(CI)F' /grant 'Administrators:(OI)(CI)F' | Out-Null
+Get-ChildItem \$d -File | ForEach-Object { icacls \$_.FullName /reset | Out-Null }
 & "\$d\\mpinfra.exe" report -config "\$d\\agent.yaml"
 if (\$LASTEXITCODE -ne 0) { exit 1 }
 Unregister-ScheduledTask mp-infra-report -Confirm:\$false -ErrorAction SilentlyContinue
@@ -155,5 +162,5 @@ done
 say "Done"
 printf '%s\n' "${RESULTS[@]}"
 echo
-echo "Open http://$SERVER_IP:8098/ — enrolled hosts turn green on the next refresh."
+echo "Open the UI (https://<server>.<tailnet>.ts.net/ behind tailscale serve) — enrolled hosts turn green on the next refresh."
 printf '%s\n' "${RESULTS[@]}" | grep -q '^FAIL' && exit 1 || exit 0
