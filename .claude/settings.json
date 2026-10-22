@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ \"$CLAUDE_CODE_REMOTE\" = \"true\" ]; then go version && go mod download; fi",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}

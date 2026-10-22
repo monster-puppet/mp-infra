@@ -44,6 +44,20 @@ go build -o bin/mpinfra.exe ./cmd/mpinfra
 Deployment (systemd unit, Windows scheduled task, Tailscale ACL) is in
 [`docs/deploy.md`](docs/deploy.md).
 
+## Building with Claude Code in the cloud
+
+The repo is set up for Claude Code on the web (claude.ai/code). `CLAUDE.md` pulls in
+`AGENTS.md` and adds the cloud rules. A SessionStart hook in `.claude/settings.json`
+fetches Go modules, and GitHub Actions runs `make check` on every PR.
+
+```sh
+claude --cloud "Implement phase 0 of docs/spec.md. Open a PR when make check passes."
+claude --teleport            # pull a cloud session back into this checkout
+```
+
+Cloud sessions can build, test and open PRs. They cannot deploy: the cloud VM is not on
+the tailnet. Deploying is a local step (`docs/deploy.md`).
+
 ## Secrets
 
 None in this repo, ever. Tokens come from environment variables named in the config
