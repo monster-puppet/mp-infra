@@ -44,6 +44,8 @@ go build -o bin/mpinfra.exe ./cmd/mpinfra
 ./bin/mpinfra.exe serve -config config.example.yaml -addr 127.0.0.1:8098
 ```
 
+Step-by-step for getting hosts to report: [`docs/setup.md`](docs/setup.md).
+
 Deployment (systemd unit, Windows scheduled task, Tailscale ACL) is in
 [`docs/deploy.md`](docs/deploy.md).
 
