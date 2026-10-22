@@ -353,6 +353,7 @@ type tailnetView struct {
 type deviceView struct {
 	Name   string
 	OS     string // icon family
+	Logo   string // OS logo on the network map: windows, apple, linux, android or ""
 	OSName string
 	Addr   string
 	Tags   string
@@ -372,6 +373,17 @@ func deviceFamily(os string) string {
 		return "phone"
 	}
 	return "device"
+}
+
+// deviceLogo maps a Tailscale device OS to its logo on the network map.
+func deviceLogo(os string) string {
+	switch os = strings.ToLower(os); os {
+	case "windows", "linux", "android":
+		return os
+	case "macos", "ios", "ipados", "tvos":
+		return "apple"
+	}
+	return ""
 }
 
 // deviceOSName capitalises the OS names Tailscale sends in lower case.
@@ -403,7 +415,7 @@ func tailnet(c checkView, now time.Time) *tailnetView {
 		if d.Host != "" {
 			continue
 		}
-		v := deviceView{Name: d.Name, OS: deviceFamily(d.OS), OSName: deviceOSName(d.OS), Addr: d.Addr, Tags: strings.Join(d.Tags, " ")}
+		v := deviceView{Name: d.Name, OS: deviceFamily(d.OS), Logo: deviceLogo(d.OS), OSName: deviceOSName(d.OS), Addr: d.Addr, Tags: strings.Join(d.Tags, " ")}
 		if d.Connected {
 			t.Online = append(t.Online, v)
 			continue

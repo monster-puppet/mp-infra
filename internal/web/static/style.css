@@ -963,6 +963,16 @@ pre.data {
 .map-device .map-icon { stroke: var(--ok); stroke-opacity: 0.85; }
 .map-device:hover .map-icon { stroke-opacity: 1; stroke-width: 2.6; }
 .device-hit { fill: transparent; stroke: none; }
+.device-logo { fill: var(--ok); stroke: none; }
+.device-logo .logo-cut { fill: var(--bg); }
+.device-logo .logo-stroke { fill: none; stroke: var(--ok); stroke-width: 2.4; stroke-linecap: round; }
+.device-label {
+  font-size: 10px;
+  text-anchor: middle;
+  fill: var(--text-muted);
+  stroke: none;
+}
+.map-device:hover .device-label { fill: var(--text-strong); }
 
 /* Host-to-host arcs: thinner than the network lines, arrowhead at the host connected to. */
 .host-link .link-line { stroke-width: 2; }

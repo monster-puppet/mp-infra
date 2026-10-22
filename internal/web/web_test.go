@@ -455,14 +455,14 @@ func TestNetMapDevices(t *testing.T) {
 	hosts := []config.Host{{Name: "a"}, {Name: "b"}, {Name: "c"}}
 	tn := &tailnetView{}
 	for _, os := range []string{"laptop", "phone", "windows", "linux", "device", "laptop", "phone", "linux", "linux", "linux", "linux", "linux"} {
-		tn.Online = append(tn.Online, deviceView{Name: "d", OS: os, OSName: os, Addr: "100.64.0.1"})
+		tn.Online = append(tn.Online, deviceView{Name: "d", OS: os, OSName: os, Addr: "100.64.0.1", Logo: "linux"})
 	}
 	m := buildMap(hosts, nil, nil, nil, tn)
-	// Three rows of three fit in a three-host bubble: eight devices and "+4".
-	if len(m.Devices) != 8 || len(m.MoreDevices) != 1 || m.MoreDevices[0].Chip != "+4" {
+	// Three rows of two fit in a three-host bubble: five devices and "+7".
+	if len(m.Devices) != 5 || len(m.MoreDevices) != 1 || m.MoreDevices[0].Chip != "+7" {
 		t.Fatalf("devices %d, more %+v", len(m.Devices), m.MoreDevices)
 	}
-	if m.Devices[0].Shape != "laptop" || m.Devices[1].Shape != "phone" || m.Devices[2].Shape != "monitor" || m.Devices[0].Title != "d · laptop · 100.64.0.1" {
+	if m.Devices[0].Shape != "laptop" || m.Devices[1].Shape != "phone" || m.Devices[2].Shape != "monitor" || m.Devices[0].Logo != "linux" || m.Devices[0].Title != "d · laptop · 100.64.0.1" {
 		t.Errorf("shapes: %+v", m.Devices[:3])
 	}
 	for _, d := range m.Devices {

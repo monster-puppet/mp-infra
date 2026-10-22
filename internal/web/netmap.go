@@ -92,6 +92,8 @@ type hostLink struct {
 type mapDevice struct {
 	X, Y  float64
 	Shape string // monitor, laptop or phone
+	Logo  string // windows, apple, linux, android or ""
+	Name  string
 	Title string
 }
 
@@ -100,6 +102,7 @@ type mapView struct {
 	Links       []hostLink
 	Devices     []mapDevice
 	MoreDevices []mapBadge // "+N" when they do not all fit
+	TailnetY    float64    // baseline of the bubble's name
 	// Failed logins across all hosts in the last 24 h, shown in the internet bubble
 	// under its globe: "12,045", or "" when none. FailedClass colours it like the
 	// worst host's count (active during a brute force).
@@ -159,34 +162,42 @@ func (m *mapView) layout() {
 	m.layoutDevices()
 }
 
-// Devices sit in rows of three under the bubble's name.
-const devCell, devCols = 30.0, 3
+// Devices sit in rows of two, each a small computer with its OS logo on the
+// screen and its name underneath. The bubble's name sits above them and the whole
+// block is centred in the bubble.
+const (
+	devCellW, devCellH, devCols = 62.0, 48.0, 2
+	devTop, devBottom           = 52.0, 80.0 // clear of the bubble's rounded ends
+)
 
 // layoutDevices fills the tailnet bubble with as many devices as fit; the last
 // cell becomes "+N" when some do not.
 func (m *mapView) layoutDevices() {
+	m.TailnetY = m.H/2 + 5
 	if len(m.Devices) == 0 {
 		return
 	}
-	cx, top := m.W-mapPad-mapBubbleW/2, m.H/2+30
-	// Keep clear of the bubble's rounded bottom.
-	rows := int((m.H-44-top)/devCell) + 1
-	fit := max(0, rows*devCols)
-	if len(m.Devices) > fit {
+	// Block: name, then rows whose icons sit 46 below the block's top and whose
+	// labels end 26 below the last row's centre.
+	fitRows := int((m.H-devBottom-devTop-46)/devCellH) + 1
+	rows := min((len(m.Devices)+devCols-1)/devCols, fitRows)
+	start := max(devTop, m.H/2-(72+float64(rows-1)*devCellH)/2)
+	m.TailnetY = start + 14
+	cx, top := m.W-mapPad-mapBubbleW/2, start+46
+	cell := func(i int) (float64, float64) {
+		return cx + (float64(i%devCols)-0.5)*devCellW, top + float64(i/devCols)*devCellH
+	}
+	if fit := rows * devCols; len(m.Devices) > fit {
 		more := len(m.Devices) - (fit - 1)
 		m.Devices = m.Devices[:fit-1]
-		x, y := cell(cx, top, fit-1)
+		x, y := cell(fit - 1)
 		chip := fmt.Sprintf("+%d", more)
 		m.MoreDevices = []mapBadge{{X: x, Y: y, W: chipW(chip), Chip: chip, Class: "none",
 			Title: fmt.Sprintf("%d more devices, listed under Tailnet", more), Href: "#tailnet"}}
 	}
 	for i := range m.Devices {
-		m.Devices[i].X, m.Devices[i].Y = cell(cx, top, i)
+		m.Devices[i].X, m.Devices[i].Y = cell(i)
 	}
-}
-
-func cell(cx, top float64, i int) (float64, float64) {
-	return cx + float64(i%devCols-1)*devCell, top + float64(i/devCols)*devCell
 }
 
 // layoutLinks draws each host link as an arc out of the side of the host column
@@ -446,7 +457,7 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 					title += " · " + s
 				}
 			}
-			m.Devices = append(m.Devices, mapDevice{Shape: shape, Title: title})
+			m.Devices = append(m.Devices, mapDevice{Shape: shape, Logo: d.Logo, Name: clipRunes(d.Name, 10), Title: title})
 		}
 	}
 	m.layout()
