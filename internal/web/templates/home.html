@@ -20,16 +20,16 @@
 {{define "row"}}
 <article class="card row state-{{.State}}">
   <header class="row-head">
-    <h3>{{if .Link}}<a href="{{.Link}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</h3>
+    <h3>{{if .OS}}{{template "osicon" .}}{{end}}{{if .Link}}<a href="{{.Link}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</h3>
     {{template "badge" .State}}
   </header>
-  {{if .Note}}<p class="row-note">{{.Note}}</p>{{end}}
+  {{if or .Note .OSName}}<p class="row-note">{{if .Host}}{{if ne .Name .Host}}<span class="mono">{{.Host}}</span> · {{end}}{{end}}{{with .OSName}}{{.}}{{if $.Note}} · {{end}}{{end}}{{.Note}}</p>{{end}}
   <ul class="checks">
   {{range .Checks}}
     <li class="check{{if .Acked}} acked{{end}}">
       <a href="{{checkURL .Host .ID}}">
         <span class="dot dot-{{.State}}" title="{{.State}}"></span>
-        <span class="check-id">{{.ID}}{{if eq .Host "serve"}}{{else if not (eq .Host $.Name)}} <small>{{.Host}}</small>{{end}}</span>
+        <span class="check-id">{{.ID}}{{if eq .Host "serve"}}{{else if ne .Host $.Host}} <small>{{label .Host}}</small>{{end}}</span>
         <span class="check-sum">{{.Summary}}</span>
         <span class="check-age">{{if .Acked}}acknowledged · {{end}}{{.Age}}</span>
       </a>

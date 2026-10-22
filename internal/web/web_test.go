@@ -263,3 +263,27 @@ func TestAgo(t *testing.T) {
 		t.Error("zero time")
 	}
 }
+
+func TestHostLabels(t *testing.T) {
+	e := setup(t)
+	e.srv.Cfg.Hosts[0].Label, e.srv.Cfg.Hosts[0].OS = "Perforce <main>", "rocky"
+	e.srv.Cfg.Hosts[2].OS = "windows"
+	if rec := e.post("tok-monster-p4", body("monster-p4", "up")); rec.Code != 204 {
+		t.Fatal(rec.Code, rec.Body.String())
+	}
+	h := e.get("/").Body.String()
+	for _, want := range []string{"Perforce &lt;main&gt;", `href="/history?host=monster-p4"`, "Rocky Linux", "os-linux", `class="os-icon os-windows"`} {
+		if !strings.Contains(h, want) {
+			t.Errorf("home lacks %q", want)
+		}
+	}
+	if strings.Contains(h, "Perforce <main>") {
+		t.Error("label not escaped")
+	}
+	if c := e.get("/check/monster-p4/host.uptime").Body.String(); !strings.Contains(c, "Perforce &lt;main&gt;") || !strings.Contains(c, "/history?host=monster-p4") {
+		t.Error("check page does not show the label")
+	}
+	if hist := e.get("/history").Body.String(); !strings.Contains(hist, `<option value="monster-p4">Perforce &lt;main&gt;</option>`) {
+		t.Error("history filter does not show the label")
+	}
+}

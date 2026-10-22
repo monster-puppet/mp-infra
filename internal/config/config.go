@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -70,7 +71,12 @@ type GoogleLogin struct {
 func (g GoogleLogin) Enabled() bool { return g.ClientID != "" }
 
 type Host struct {
-	Name                string `yaml:"name"`
+	// Name is the host's identity: report tokens, agent configs, check ids and the
+	// database all use it, so it never changes. Label is what the UI shows instead.
+	Name  string `yaml:"name"`
+	Label string `yaml:"label"`
+	// OS picks the icon next to the host in the UI. One of OSNames, or empty.
+	OS                  string `yaml:"os"`
 	PublicIP            string `yaml:"public_ip"`
 	ExpectedPublicPorts []int  `yaml:"expected_public_ports"`
 	// NotOnTailnet skips the Tailscale checks (p4-game until it joins).
@@ -207,8 +213,41 @@ func LoadServer(path string) (*Server, error) {
 			return nil, fmt.Errorf("%s: duplicate host %q", path, h.Name)
 		}
 		seen[h.Name] = true
+		if utf8.RuneCountInString(h.Label) > 40 || strings.TrimSpace(h.Label) != h.Label {
+			return nil, fmt.Errorf("%s: host %s: label must be at most 40 characters, without surrounding spaces", path, h.Name)
+		}
+		if h.OS != "" && OSNames[h.OS] == "" {
+			return nil, fmt.Errorf("%s: host %s: unknown os %q", path, h.Name, h.OS)
+		}
 	}
 	return &c, nil
+}
+
+// OSNames maps the allowed values of a host's os to the name the UI shows.
+var OSNames = map[string]string{
+	"linux":   "Linux",
+	"rocky":   "Rocky Linux",
+	"centos":  "CentOS Stream",
+	"ubuntu":  "Ubuntu",
+	"debian":  "Debian",
+	"windows": "Windows Server",
+}
+
+// OSFamily is the icon family of an os value: "linux", "windows" or "".
+func OSFamily(os string) string {
+	switch os {
+	case "windows", "":
+		return os
+	}
+	return "linux"
+}
+
+// DisplayName is the host's label, or its name when it has none.
+func (h Host) DisplayName() string {
+	if h.Label != "" {
+		return h.Label
+	}
+	return h.Name
 }
 
 // checkGoogle validates google_login. Google accepts an http redirect URI only on
@@ -300,6 +339,16 @@ func Env(name string) string {
 		return ""
 	}
 	return strings.TrimSpace(os.Getenv(name))
+}
+
+// HostByName returns the configured host called name.
+func (c *Server) HostByName(name string) (Host, bool) {
+	for _, h := range c.Hosts {
+		if h.Name == name {
+			return h, true
+		}
+	}
+	return Host{}, false
 }
 
 // HasHost reports whether name is a configured host.

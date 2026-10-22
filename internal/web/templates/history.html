@@ -5,7 +5,7 @@
     <label for="host">Host</label>
     <select id="host" name="host">
       <option value="">All hosts</option>
-      {{$cur := .Host}}{{range .Hosts}}<option value="{{.}}"{{if eq . $cur}} selected{{end}}>{{.}}</option>{{end}}
+      {{$cur := .Host}}{{range .Hosts}}<option value="{{.}}"{{if eq . $cur}} selected{{end}}>{{label .}}</option>{{end}}
     </select>
   </div>
   <button class="btn" type="submit">Filter</button>

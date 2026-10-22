@@ -10,17 +10,27 @@ probe_interval: 5m
 base_url: "http://TAILNET_IP:8098"   # for links in alerts
 
 hosts:
+# name is the host's identity (agent config, report token, check ids) and never
+# changes. label is what the UI shows instead; os picks its icon: rocky, centos,
+# ubuntu, debian, linux or windows. Both are optional.
   - name: monster-p4
+    label: "Perforce"
+    os: rocky
     public_ip: "PUBLIC_IP"
     expected_public_ports: [22, 80, 443]
   - name: jenkins
+    label: "Jenkins"
+    os: centos
     public_ip: "PUBLIC_IP"
     expected_public_ports: [22, 80, 443, 50001]
   - name: jenkins-win
+    label: "Windows build agent"
+    os: windows
     public_ip: "PUBLIC_IP"
     expected_public_ports: []
   # Phase 3. Until it joins the tailnet:
   # - name: p4-game
+  #   os: ubuntu
   #   public_ip: "PUBLIC_IP"
   #   expected_public_ports: [22, 1666]
   #   not_on_tailnet: true

@@ -52,6 +52,7 @@ func New(srv *server.Server, who Whoiser) *Web {
 		"date":     func(t time.Time) string { return t.Local().Format("2006-01-02 15:04") },
 		"checkURL": checkURL,
 		"pathEsc":  url.PathEscape,
+		"label":    w.label,
 	}
 	for _, page := range []string{"home", "check", "history", "error", "signin"} {
 		w.pages[page] = template.Must(template.New("layout.html").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", "templates/"+page+".html"))
@@ -62,6 +63,14 @@ func New(srv *server.Server, who Whoiser) *Web {
 // RequireGoogle puts every UI page except the open ones behind Google sign-in.
 // Call it before UI.
 func (w *Web) RequireGoogle(g *GoogleAuth) { w.google = g }
+
+// label is the name the UI shows for a host: its configured label, else its name.
+func (w *Web) label(host string) string {
+	if h, ok := w.srv.Cfg.HostByName(host); ok {
+		return h.DisplayName()
+	}
+	return host
+}
 
 func checkURL(host, id string) string {
 	return "/check/" + url.PathEscape(host) + "/" + url.PathEscape(id)
@@ -250,6 +259,9 @@ type checkView struct {
 
 type rowView struct {
 	Name   string
+	Host   string // the host's name on a host row, "" on a group row
+	OS     string // icon family, see config.OSFamily
+	OSName string
 	Link   string
 	State  eval.State
 	Note   string
@@ -342,7 +354,8 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 	}
 	d := homeData{Overall: eval.OK, Empty: len(checks) == 0}
 	for _, h := range w.srv.Cfg.Hosts {
-		row := newRow(h.Name, byHost[h.Name])
+		row := newRow(h.DisplayName(), byHost[h.Name])
+		row.Host, row.OS, row.OSName = h.Name, config.OSFamily(h.OS), config.OSNames[h.OS]
 		row.Link = "/history?host=" + url.QueryEscape(h.Name)
 		switch {
 		case h.NoReport:
@@ -448,7 +461,7 @@ func (w *Web) check(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 	d.CanAccept = strings.HasPrefix(c.ID, "fw.rules.") && c.State == eval.Warn
-	w.render(rw, r, "check", 200, page{Title: c.Host + " · " + c.ID, Section: "home", Data: d})
+	w.render(rw, r, "check", 200, page{Title: w.label(c.Host) + " · " + c.ID, Section: "home", Data: d})
 }
 
 func (w *Web) back(rw http.ResponseWriter, r *http.Request, msg string) {

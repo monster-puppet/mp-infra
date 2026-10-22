@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -26,6 +27,12 @@ func TestLoadServerExample(t *testing.T) {
 	if len(c.Hosts) != 3 || c.StaleAfter != 15*time.Minute {
 		t.Fatalf("got %d hosts, stale_after %s", len(c.Hosts), c.StaleAfter)
 	}
+	if h, _ := c.HostByName("jenkins-win"); h.DisplayName() != "Windows build agent" || OSFamily(h.OS) != "windows" {
+		t.Fatalf("jenkins-win: %+v", h)
+	}
+	if OSFamily("rocky") != "linux" || (Host{Name: "x"}).DisplayName() != "x" {
+		t.Fatal("OSFamily or DisplayName fallback")
+	}
 }
 
 func TestLoadServerRejects(t *testing.T) {
@@ -33,6 +40,9 @@ func TestLoadServerRejects(t *testing.T) {
 		"hosts: [{name: A}]",
 		"hosts: [{name: a}, {name: a}]",
 		"stale_after: 10s",
+		"hosts: [{name: a, os: beos}]",
+		"hosts: [{name: a, label: ' padded'}]",
+		"hosts: [{name: a, label: " + strings.Repeat("x", 41) + "}]",
 		// google_login: missing env names, no allow list, http base_url, base_url with a path
 		"base_url: https://ui.example.ts.net\ngoogle_login: {client_id: x, allowed_domain: example.com}",
 		"base_url: https://ui.example.ts.net\ngoogle_login: {client_id: x, client_secret_env: S, session_key_env: K}",

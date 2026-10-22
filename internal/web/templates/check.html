@@ -1,5 +1,5 @@
 {{define "content"}}{{with .Data}}{{with .Check}}
-<p class="crumbs"><a href="/">Status</a> / <a href="/history?host={{.Host}}">{{.Host}}</a></p>
+<p class="crumbs"><a href="/">Status</a> / <a href="/history?host={{.Host}}">{{label .Host}}</a></p>
 <section class="card detail state-{{.Effective}}">
   <header class="row-head">
     <h1 class="detail-title">{{.ID}}</h1>
@@ -7,7 +7,7 @@
   </header>
   <p class="detail-summary">{{.Summary}}</p>
   <dl class="facts">
-    <dt>Host</dt><dd>{{.Host}}</dd>
+    <dt>Host</dt><dd>{{label .Host}}{{if ne (label .Host) .Host}} <span class="mono muted">{{.Host}}</span>{{end}}</dd>
     <dt>State since</dt><dd>{{date .Since}} ({{ago .Since}})</dd>
     <dt>Last update</dt><dd>{{date .UpdatedAt}} ({{.Age}})</dd>
     {{if .Acked}}<dt>Acknowledged</dt><dd>until {{date .AckUntil}} by {{.AckBy}}{{if .AckNote}}: {{.AckNote}}{{end}}</dd>{{end}}

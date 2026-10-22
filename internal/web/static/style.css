@@ -680,3 +680,35 @@ pre.data {
   .container { animation: none; }
   .btn, .nav-links a { transition: none; }
 }
+
+/* OS icon in front of a host name. */
+.row-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.os-icon {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.os-icon svg {
+  display: block;
+}
+
+.os-windows { color: var(--accent); }
+.os-linux { color: var(--text-strong); }
+.os-icon .os-cut { fill: var(--bg); }
+.os-icon .os-beak { fill: var(--warn); }
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+.muted {
+  color: var(--text-muted);
+}
