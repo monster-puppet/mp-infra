@@ -100,7 +100,11 @@ type mapView struct {
 	Links        []hostLink
 	Devices      []mapDevice
 	MoreDevices  []mapBadge // "+N" when they do not all fit
-	InternetNote string
+	// Failed logins across all hosts in the last 24 h, shown in the internet bubble
+	// under its globe: "12,045", or "" when none. FailedClass colours it like the
+	// worst host's count (active during a brute force).
+	Failed      string
+	FailedClass string
 	TailnetNote  string
 	// Wide layout: networks left and right of a host column.
 	W, H float64
@@ -422,7 +426,13 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 		m.Nodes = append(m.Nodes, nd)
 	}
 	if failed > 0 {
-		m.InternetNote = fmt.Sprintf("%s failed logins / 24 h", thousands(failed))
+		m.Failed = thousands(failed)
+		rank := map[string]int{"warn": 1, "crit": 2, "active": 3}
+		for _, nd := range m.Nodes {
+			if nd.Failed != "" && (m.FailedClass == "" || rank[nd.FailedState] > rank[m.FailedClass]) {
+				m.FailedClass = nd.FailedState
+			}
+		}
 	}
 	m.Links = hostLinks(m.Nodes, links, all)
 	if tn != nil {

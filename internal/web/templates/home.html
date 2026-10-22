@@ -12,9 +12,16 @@
       <filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     </defs>
     <g class="bubble bubble-internet">
+      <title>Internet</title>
       <rect x="28" y="12" width="150" height="{{sub .H 24}}" rx="75"/>
-      <text x="103" y="{{half .H}}" class="bubble-name">Internet</text>
-      {{with .InternetNote}}<text x="103" y="{{add (half $.Data.Map.H) 22}}" class="bubble-note">{{.}}</text>{{end}}
+      {{if .Failed}}
+      {{template "globe" (badge 103 (sub (half .H) 34))}}
+      <text x="103" y="{{add (half .H) 20}}" class="inet-failed failed-{{.FailedClass}}">{{.Failed}}</text>
+      <text x="103" y="{{add (half .H) 38}}" class="bubble-note">failed logins</text>
+      <text x="103" y="{{add (half .H) 53}}" class="bubble-note">last 24 h</text>
+      {{else}}
+      {{template "globe" (badge 103 (half .H))}}
+      {{end}}
     </g>
     <g class="bubble bubble-tailnet">
       <rect x="{{sub .W 178}}" y="12" width="150" height="{{sub .H 24}}" rx="75"/>
@@ -46,9 +53,15 @@
   </svg>
   <svg class="map-narrow" viewBox="0 0 {{.NW}} {{.NH}}" role="img" aria-label="Hosts between the internet and the tailnet">
     <g class="bubble bubble-internet">
+      <title>Internet</title>
       <rect x="12" y="10" width="{{sub .NW 24}}" height="68" rx="34"/>
-      <text x="{{half .NW}}" y="{{if .InternetNote}}42{{else}}50{{end}}" class="bubble-name">Internet</text>
-      {{with .InternetNote}}<text x="{{half $.Data.Map.NW}}" y="62" class="bubble-note">{{.}}</text>{{end}}
+      {{if .Failed}}
+      {{template "globe" (badge (sub (half .NW) 64) 44)}}
+      <text x="{{add (half .NW) 18}}" y="43" class="inet-failed inet-failed-small failed-{{.FailedClass}}">{{.Failed}}</text>
+      <text x="{{add (half .NW) 18}}" y="60" class="bubble-note">failed logins / 24 h</text>
+      {{else}}
+      {{template "globe" (badge (half .NW) 44)}}
+      {{end}}
     </g>
     <g class="bubble bubble-tailnet">
       <rect x="12" y="{{sub .NH 78}}" width="{{sub .NW 24}}" height="68" rx="34"/>
@@ -138,6 +151,9 @@
 
 {{/* A tailnet device at 0.8 of a 24-unit grid, centred on X, Y. */}}
 {{define "deviceicon"}}<g class="map-icon" transform="translate({{sub .X 9.6}} {{sub .Y 9.6}}) scale(0.8)"><rect x="-1" y="-1" width="26" height="26" class="device-hit"/>{{if eq .Shape "laptop"}}<rect x="4" y="4" width="16" height="11" rx="1.5"/><path d="M2 19h20"/>{{else if eq .Shape "phone"}}<rect x="6.5" y="2" width="11" height="20" rx="2"/><path d="M11 18h2"/>{{else}}<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/>{{end}}</g>{{end}}
+
+{{/* The internet bubble's globe, 44 units across, centred on X, Y. */}}
+{{define "globe"}}<g class="globe" transform="translate({{sub .X 22}} {{sub .Y 22}}) scale(1.833)"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/><path d="M4.2 7h15.6M4.2 17h15.6" class="globe-lat"/></g>{{end}}
 
 {{define "hostlink"}}<a href="{{or .Href "#"}}" class="map-link host-link link-{{.State}}"><title>{{.Title}}</title><path d="{{.Path}}" class="link-hit"/><path d="{{.Path}}" class="link-line"/><path d="{{.Arrow}}" class="link-arrow"/></a>{{end}}
 

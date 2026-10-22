@@ -912,6 +912,27 @@ pre.data {
   fill: var(--text-muted);
 }
 
+.globe {
+  fill: none;
+  stroke: var(--text-strong);
+  stroke-opacity: 0.85;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+}
+
+.globe-lat { stroke-opacity: 0.45; }
+
+/* The failed-login total under the globe: a big number, its label below. */
+.inet-failed {
+  font-size: 24px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  text-anchor: middle;
+  fill: var(--text-strong);
+}
+
+.inet-failed-small { font-size: 18px; }
+
 .link-hit {
   fill: none;
   stroke: transparent;
