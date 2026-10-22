@@ -216,10 +216,29 @@ func TestAuthLast4h(t *testing.T) {
 	if !strings.Contains(string(c.Data), `"last_4h":2`) || !strings.Contains(string(c.Data), `"total":3`) {
 		t.Errorf("%s", c.Data)
 	}
+	if !strings.Contains(c.Summary, "3 failed logins in 24 h (2 in 4 h)") || !strings.Contains(string(c.Data), `"last":"2026-10-22T14:00:00Z"`) {
+		t.Errorf("summary %q data %s", c.Summary, c.Data)
+	}
 	// A source without a time group: no 4 h count at all rather than a short one.
 	af.Sources = append(af.Sources, config.AuthSource{Name: "rdp", Pattern: `^(?P<ip>\S+)$`})
 	c = evalAuth("auth.failures.h", af, []string{out, "198.51.100.7\n"}, []error{nil, nil}, now)
 	if strings.Contains(string(c.Data), "last_4h") {
 		t.Errorf("partial 4 h count: %s", c.Data)
+	}
+}
+
+func TestAuthBruteForceEnded(t *testing.T) {
+	// now is 14:05 UTC. 192.0.2.1 failed 3 times, last at 09:00: over 4 h ago.
+	af := &config.AuthFailures{WarnPerIP: 3, Sources: []config.AuthSource{{Name: "rdp",
+		Pattern: `^(?P<time>\S+) (?P<ip>[0-9a-fA-F.:]+)\s*$`}}}
+	old := "2026-10-22T08:00:00Z 192.0.2.1\n2026-10-22T08:30:00Z 192.0.2.1\n2026-10-22T09:00:00.1234567Z 192.0.2.1\n"
+	c := evalAuth("auth.failures.h", af, []string{old}, []error{nil}, now)
+	if c.State != eval.OK || !strings.Contains(c.Summary, "brute force from 192.0.2.1 ended, last 5 h ago") {
+		t.Errorf("ended: %s %q", c.State, c.Summary)
+	}
+	// One more failure 10 minutes ago: it is going on, so warn.
+	c = evalAuth("auth.failures.h", af, []string{old + "2026-10-22T13:55:00Z 192.0.2.1\n"}, []error{nil}, now)
+	if c.State != eval.Warn || !strings.Contains(c.Summary, "brute force from 192.0.2.1, last 10 min ago") {
+		t.Errorf("ongoing: %s %q", c.State, c.Summary)
 	}
 }

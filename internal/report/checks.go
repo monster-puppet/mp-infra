@@ -456,6 +456,7 @@ type authCount struct {
 type ipCount struct {
 	IP    string `json:"ip"`
 	Count int    `json:"count"`
+	Last  string `json:"last,omitempty"` // newest failure, RFC 3339 UTC, when the pattern has "time"
 }
 
 func authCheck(ctx context.Context, id string, af *config.AuthFailures, now time.Time) (Check, error) {
@@ -468,12 +469,14 @@ func authCheck(ctx context.Context, id string, af *config.AuthFailures, now time
 }
 
 // RecentWindow is the shorter window counted next to the 24 h total, when every
-// source's pattern has a named group "time".
+// source's pattern has a named group "time". A brute force whose address has not
+// failed within it is over, so it no longer warns.
 const RecentWindow = 4 * time.Hour
 
 func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error, now time.Time) Check {
 	total, recent, timed := 0, 0, true
 	ips := map[string]int{}
+	lastIP := map[string]time.Time{}
 	var per []authCount
 	failed := 0
 	for i, src := range af.Sources {
@@ -491,12 +494,19 @@ func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error, n
 				continue
 			}
 			ac.Count++
+			ip := ""
 			if ipIdx > 0 && m[ipIdx] != "" {
-				ips[Clip(m[ipIdx], 64)]++
+				ip = Clip(m[ipIdx], 64)
+				ips[ip]++
 			}
 			if timeIdx > 0 {
-				if t, ok := parseLoginTime(m[timeIdx]); ok && now.Sub(t) <= RecentWindow {
-					recent++
+				if t, ok := parseLoginTime(m[timeIdx]); ok {
+					if now.Sub(t) <= RecentWindow {
+						recent++
+					}
+					if ip != "" && t.After(lastIP[ip]) {
+						lastIP[ip] = t
+					}
 				}
 			}
 		}
@@ -505,7 +515,7 @@ func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error, n
 	}
 	top := make([]ipCount, 0, len(ips))
 	for ip, n := range ips {
-		top = append(top, ipCount{ip, n})
+		top = append(top, ipCount{IP: ip, Count: n})
 	}
 	sort.Slice(top, func(i, j int) bool {
 		if top[i].Count != top[j].Count {
@@ -516,7 +526,16 @@ func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error, n
 	if len(top) > 10 {
 		top = top[:10]
 	}
+	for i := range top {
+		if t, ok := lastIP[top[i].IP]; ok && timed {
+			top[i].Last = t.Format(time.RFC3339)
+		}
+	}
+	timed = timed && len(af.Sources) > 0
 	c := Check{ID: id, State: eval.OK, Summary: fmt.Sprintf("%d failed logins in 24 h", total)}
+	if timed {
+		c.Summary += fmt.Sprintf(" (%d in 4 h)", recent)
+	}
 	if len(top) > 0 {
 		c.Summary += fmt.Sprintf(", top %s (%d)", top[0].IP, top[0].Count)
 	}
@@ -524,15 +543,24 @@ func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error, n
 		c.State = eval.Warn
 	}
 	if af.WarnPerIP > 0 && len(top) > 0 && top[0].Count >= af.WarnPerIP {
-		c.State = eval.Warn
-		c.Summary += fmt.Sprintf("; brute force from %s", top[0].IP)
+		t, known := lastIP[top[0].IP]
+		switch {
+		case !timed || !known:
+			c.State = eval.Warn
+			c.Summary += fmt.Sprintf("; brute force from %s", top[0].IP)
+		case now.Sub(t) > RecentWindow:
+			c.Summary += fmt.Sprintf("; brute force from %s ended, last %s", top[0].IP, ago(now, t))
+		default:
+			c.State = eval.Warn
+			c.Summary += fmt.Sprintf("; brute force from %s, last %s", top[0].IP, ago(now, t))
+		}
 	}
 	if failed > 0 {
 		c.State = eval.Warn
 		c.Summary += fmt.Sprintf("; %d source(s) failed", failed)
 	}
 	d := map[string]any{"total": total, "sources": per, "top_ips": top}
-	if timed && len(af.Sources) > 0 {
+	if timed {
 		d["last_4h"] = recent
 	}
 	c.Data = mustJSON(d)
