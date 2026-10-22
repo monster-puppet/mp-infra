@@ -20,6 +20,10 @@
       <text x="103" y="{{add (half .H) 30}}" class="inet-failed failed-{{.FailedClass}}">{{.Failed}}</text>
       <text x="103" y="{{add (half .H) 48}}" class="bubble-note">failed logins</text>
       <text x="103" y="{{add (half .H) 63}}" class="bubble-note">last 24 h</text>
+      {{with .Failed4h}}
+      <text x="103" y="{{add (half $.Data.Map.H) 92}}" class="inet-failed inet-failed-small">{{.}}</text>
+      <text x="103" y="{{add (half $.Data.Map.H) 108}}" class="bubble-note">last 4 h</text>
+      {{end}}
       {{else}}
       {{template "globe" (badge 103 (sub (half .H) 16))}}
       <text x="103" y="{{add (half .H) 28}}" class="bubble-name">Internet</text>
@@ -60,7 +64,7 @@
       {{template "globe" (badge (sub (half .NW) 110) 44)}}
       <text x="{{sub (half .NW) 32}}" y="50" class="bubble-name">Internet</text>
       <text x="{{add (half .NW) 90}}" y="43" class="inet-failed inet-failed-small failed-{{.FailedClass}}">{{.Failed}}</text>
-      <text x="{{add (half .NW) 90}}" y="60" class="bubble-note">failed logins / 24 h</text>
+      <text x="{{add (half .NW) 90}}" y="60" class="bubble-note">{{if .Failed4h}}/ 24 h · {{.Failed4h}} / 4 h{{else}}failed logins / 24 h{{end}}</text>
       {{else}}
       {{template "globe" (badge (sub (half .NW) 50) 44)}}
       <text x="{{add (half .NW) 26}}" y="50" class="bubble-name">Internet</text>

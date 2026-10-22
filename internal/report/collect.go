@@ -131,7 +131,7 @@ func collectors(cfg *config.Agent) []collector {
 	if af := cfg.AuthFailures; af != nil {
 		id := "auth.failures." + cfg.Host
 		cs = append(cs, collector{id: id, onError: eval.Warn, run: func(ctx context.Context) ([]Check, error) {
-			c, err := authCheck(ctx, id, af)
+			c, err := authCheck(ctx, id, af, time.Now())
 			return []Check{c}, err
 		}})
 	}

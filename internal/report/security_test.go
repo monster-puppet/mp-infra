@@ -15,11 +15,11 @@ import (
 
 func TestAuthPerIP(t *testing.T) {
 	af := &config.AuthFailures{WarnPerIP: 2, Sources: []config.AuthSource{{Name: "ssh", Pattern: `from (?P<ip>\S+)`}}}
-	c := evalAuth("auth.failures.h", af, []string{"from 192.0.2.1\nfrom 192.0.2.1\nfrom 192.0.2.2\n"}, []error{nil})
+	c := evalAuth("auth.failures.h", af, []string{"from 192.0.2.1\nfrom 192.0.2.1\nfrom 192.0.2.2\n"}, []error{nil}, now)
 	if c.State != eval.Warn || !strings.Contains(c.Summary, "brute force from 192.0.2.1") {
 		t.Errorf("%+v", c)
 	}
-	c = evalAuth("auth.failures.h", af, []string{"from 192.0.2.1\nfrom 192.0.2.2\n"}, []error{nil})
+	c = evalAuth("auth.failures.h", af, []string{"from 192.0.2.1\nfrom 192.0.2.2\n"}, []error{nil}, now)
 	if c.State != eval.OK {
 		t.Errorf("below per-IP threshold: %+v", c)
 	}
@@ -202,5 +202,24 @@ func TestParseWindowsListeners(t *testing.T) {
 	want := "tcp 0.0.0.0:3389 svchost|tcp [::]:dynamic lsass|tcp 0.0.0.0:4444 ?"
 	if got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}
+
+func TestAuthLast4h(t *testing.T) {
+	// payload_test's now is 14:05 UTC: two of the three failures fall in the last 4 h.
+	af := &config.AuthFailures{Sources: []config.AuthSource{{Name: "ssh",
+		Pattern: `^(?P<time>\S+) \S+ sshd\[\d+\]: (?:Failed password|Invalid user) .* from (?P<ip>[0-9a-fA-F.:]+)`}}}
+	out := "2026-10-22T09:00:00+0000 h sshd[1]: Failed password for root from 192.0.2.1 port 22 ssh2\n" +
+		"2026-10-22T12:30:00+0200 h sshd[2]: Invalid user admin from 192.0.2.2 port 22\n" +
+		"2026-10-22T14:00:00+0000 h sshd[3]: Failed password for root from 192.0.2.1 port 22 ssh2\n"
+	c := evalAuth("auth.failures.h", af, []string{out}, []error{nil}, now)
+	if !strings.Contains(string(c.Data), `"last_4h":2`) || !strings.Contains(string(c.Data), `"total":3`) {
+		t.Errorf("%s", c.Data)
+	}
+	// A source without a time group: no 4 h count at all rather than a short one.
+	af.Sources = append(af.Sources, config.AuthSource{Name: "rdp", Pattern: `^(?P<ip>\S+)$`})
+	c = evalAuth("auth.failures.h", af, []string{out, "198.51.100.7\n"}, []error{nil, nil}, now)
+	if strings.Contains(string(c.Data), "last_4h") {
+		t.Errorf("partial 4 h count: %s", c.Data)
 	}
 }

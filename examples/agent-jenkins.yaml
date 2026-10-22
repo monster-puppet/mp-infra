@@ -15,8 +15,8 @@ auth_failures:
   warn_per_ip: 100   # one IP this often in 24 h is a brute force: warn
   sources:
     - name: ssh
-      cmd: ["journalctl", "-u", "sshd", "--since", "-24h", "--no-pager", "-o", "cat"]
-      pattern: '(?:Failed password|Invalid user) .* from (?P<ip>[0-9a-fA-F.:]+)'
+      cmd: ["journalctl", "-u", "sshd", "--since", "-24h", "--no-pager", "-o", "short-iso"]
+      pattern: '^(?P<time>\S+) .*(?:Failed password|Invalid user) .* from (?P<ip>[0-9a-fA-F.:]+)'   # "time": also counts the last 4 h
 
 # Successful SSH logins. One from outside the tailnet (and allow) is crit.
 logins:

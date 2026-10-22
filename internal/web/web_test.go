@@ -471,3 +471,19 @@ func TestNetMapDevices(t *testing.T) {
 		}
 	}
 }
+
+func TestNetMapFailed4h(t *testing.T) {
+	hosts := []config.Host{{Name: "a"}, {Name: "b"}}
+	cv := func(host, data string) checkView {
+		return checkView{Check: store.Check{Host: host, ID: "auth.failures." + host, Data: data}, Effective: eval.OK}
+	}
+	m := buildMap(hosts, nil, nil, []checkView{cv("a", `{"total":10000,"last_4h":1200}`), cv("b", `{"total":984,"last_4h":3}`)}, nil)
+	if m.Failed != "10,984" || m.Failed4h != "1,203" {
+		t.Errorf("both timed: %q %q", m.Failed, m.Failed4h)
+	}
+	// b's agent has no timestamps yet: no 4 h figure rather than a short one.
+	m = buildMap(hosts, nil, nil, []checkView{cv("a", `{"total":10000,"last_4h":1200}`), cv("b", `{"total":984}`)}, nil)
+	if m.Failed != "10,984" || m.Failed4h != "" {
+		t.Errorf("one untimed: %q %q", m.Failed, m.Failed4h)
+	}
+}

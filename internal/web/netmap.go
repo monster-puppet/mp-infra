@@ -108,6 +108,9 @@ type mapView struct {
 	// worst host's count (active during a brute force).
 	Failed      string
 	FailedClass string
+	// Failed4h is the same over the last 4 h, "" unless every host that counts
+	// failed logins also reports a 4 h count.
+	Failed4h string
 	// Wide layout: networks left and right of a host column.
 	W, H float64
 	// Narrow layout (phones): networks above and below a row of hosts.
@@ -367,7 +370,7 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 		state[r.Host] = r.State
 	}
 	m := &mapView{}
-	failed := 0
+	failed, recent, timed := 0, 0, true
 	for _, h := range hosts {
 		nd := mapNode{Name: h.DisplayName(), Host: h.Name, OS: config.OSFamily(h.OS), State: state[h.Name],
 			Href: "/history?host=" + h.Name}
@@ -384,12 +387,19 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 						Top   []struct {
 							IP string `json:"ip"`
 						} `json:"top_ips"`
+						Last4h   *int   `json:"last_4h"`
 						Active   bool   `json:"active"`
 						Recent   int    `json:"recent"`
 						RecentIP string `json:"recent_ip"`
 					}
+					err := json.Unmarshal([]byte(c.Data), &d)
+					if err == nil && d.Last4h != nil {
+						recent += *d.Last4h
+					} else {
+						timed = false
+					}
 					switch {
-					case json.Unmarshal([]byte(c.Data), &d) != nil:
+					case err != nil:
 					case d.Active:
 						// Set by the server when the count jumps between two reports.
 						failed += d.Total
@@ -437,6 +447,9 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 	}
 	if failed > 0 {
 		m.Failed = thousands(failed)
+		if timed {
+			m.Failed4h = thousands(recent)
+		}
 		rank := map[string]int{"warn": 1, "crit": 2, "active": 3}
 		for _, nd := range m.Nodes {
 			if nd.Failed != "" && (m.FailedClass == "" || rank[nd.FailedState] > rank[m.FailedClass]) {

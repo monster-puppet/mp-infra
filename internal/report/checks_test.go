@@ -245,7 +245,7 @@ func TestAuth(t *testing.T) {
 		"Failed password for root from 192.0.2.1 port 22\nAccepted publickey\nFailed password for x from 192.0.2.1 port 1\n",
 		"198.51.100.7\n",
 	}
-	c := evalAuth("auth.failures.h", af, outs, []error{nil, nil})
+	c := evalAuth("auth.failures.h", af, outs, []error{nil, nil}, now)
 	d := data(t, c)
 	if c.State != eval.Warn || d["total"].(float64) != 3 {
 		t.Errorf("%+v", c)
@@ -253,7 +253,7 @@ func TestAuth(t *testing.T) {
 	if top := d["top_ips"].([]any); top[0].(map[string]any)["ip"] != "192.0.2.1" {
 		t.Errorf("top = %v", top)
 	}
-	c = evalAuth("auth.failures.h", &config.AuthFailures{Sources: af.Sources[:1]}, []string{""}, []error{errors.New("boom")})
+	c = evalAuth("auth.failures.h", &config.AuthFailures{Sources: af.Sources[:1]}, []string{""}, []error{errors.New("boom")}, now)
 	if c.State != eval.Warn || !strings.Contains(c.Summary, "1 source(s) failed") {
 		t.Errorf("failed source: %+v", c)
 	}

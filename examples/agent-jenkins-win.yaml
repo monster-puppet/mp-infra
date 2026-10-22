@@ -14,8 +14,8 @@ auth_failures:
   sources:
     - name: rdp
       cmd: ["powershell.exe", "-NoProfile", "-Command",
-            "Get-WinEvent -FilterHashtable @{LogName='Security';Id=4625;StartTime=(Get-Date).AddDays(-1)} -ErrorAction SilentlyContinue | ForEach-Object { $_.Properties[19].Value }"]
-      pattern: '^(?P<ip>[0-9a-fA-F.:]+)\s*$'
+            "Get-WinEvent -FilterHashtable @{LogName='Security';Id=4625;StartTime=(Get-Date).AddDays(-1)} -ErrorAction SilentlyContinue | ForEach-Object { '{0} {1}' -f $_.TimeCreated.ToUniversalTime().ToString('o'), $_.Properties[19].Value }"]
+      pattern: '^(?P<time>\S+) (?P<ip>[0-9a-fA-F.:]+)\s*$'   # "time": also counts the last 4 h
 
 # Successful RDP (type 10) and network (type 3) logons with a source address. One
 # from outside the tailnet (and allow) is crit.

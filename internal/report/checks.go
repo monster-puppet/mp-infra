@@ -458,17 +458,21 @@ type ipCount struct {
 	Count int    `json:"count"`
 }
 
-func authCheck(ctx context.Context, id string, af *config.AuthFailures) (Check, error) {
+func authCheck(ctx context.Context, id string, af *config.AuthFailures, now time.Time) (Check, error) {
 	outs := make([]string, len(af.Sources))
 	errs := make([]error, len(af.Sources))
 	for i, src := range af.Sources {
 		outs[i], errs[i] = run(ctx, src.Cmd, src.Env)
 	}
-	return evalAuth(id, af, outs, errs), nil
+	return evalAuth(id, af, outs, errs, now), nil
 }
 
-func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error) Check {
-	total := 0
+// RecentWindow is the shorter window counted next to the 24 h total, when every
+// source's pattern has a named group "time".
+const RecentWindow = 4 * time.Hour
+
+func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error, now time.Time) Check {
+	total, recent, timed := 0, 0, true
 	ips := map[string]int{}
 	var per []authCount
 	failed := 0
@@ -479,7 +483,8 @@ func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error) C
 			failed++
 		}
 		re := regexp.MustCompile(src.Pattern)
-		ipIdx := re.SubexpIndex("ip")
+		ipIdx, timeIdx := re.SubexpIndex("ip"), re.SubexpIndex("time")
+		timed = timed && timeIdx > 0
 		for _, line := range strings.Split(outs[i], "\n") {
 			m := re.FindStringSubmatch(line)
 			if m == nil {
@@ -488,6 +493,11 @@ func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error) C
 			ac.Count++
 			if ipIdx > 0 && m[ipIdx] != "" {
 				ips[Clip(m[ipIdx], 64)]++
+			}
+			if timeIdx > 0 {
+				if t, ok := parseLoginTime(m[timeIdx]); ok && now.Sub(t) <= RecentWindow {
+					recent++
+				}
 			}
 		}
 		total += ac.Count
@@ -521,6 +531,10 @@ func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error) C
 		c.State = eval.Warn
 		c.Summary += fmt.Sprintf("; %d source(s) failed", failed)
 	}
-	c.Data = mustJSON(map[string]any{"total": total, "sources": per, "top_ips": top})
+	d := map[string]any{"total": total, "sources": per, "top_ips": top}
+	if timed && len(af.Sources) > 0 {
+		d["last_4h"] = recent
+	}
+	c.Data = mustJSON(d)
 	return c
 }
