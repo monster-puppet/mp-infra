@@ -139,9 +139,41 @@ reach only the report endpoint. Test that `jenkins-win` cannot open the UI port.
 | `MPINFRA_NOTION_TOKEN` | Notion integration shared with the OpSec checklist only | read content |
 | `MPINFRA_DEADMAN_URL` | heartbeat ping URL | — |
 | `MPINFRA_REPORT_TOKENS` | `host=sha256hash,...` | — |
+| `MPINFRA_GOOGLE_CLIENT_SECRET` | Google OAuth client secret (§8), only with `google_login` | — |
+| `MPINFRA_SESSION_KEY` | signs sign-in cookies; `mpinfra token`, first line | — |
 
 Create each one fresh for mp-infra. Never reuse an existing token, so any one of them
 can be revoked without breaking something else.
+
+## 8. Google sign-in (optional)
+
+Off unless `google_login.client_id` is set. When on, every UI page needs a Google
+account from `allowed_domain` (a Workspace account: Google's `hd` claim must match)
+or one listed in `allowed_emails`. It is a second gate; the tailnet ACL still applies.
+`/healthz` and `/api/status.json` stay open on the tailnet for the morning brief.
+
+Google accepts an http redirect URI only for localhost, so the UI needs https on a
+real name. Use `tailscale serve` with the tailnet's ts.net certificate:
+
+1. Tailscale admin console → DNS: MagicDNS on, HTTPS Certificates on. The machine
+   name and tailnet name become public in Certificate Transparency logs.
+2. In `config.yaml`: `ui_addr: "127.0.0.1:8098"` and
+   `base_url: "https://<machine>.<tailnet>.ts.net"`.
+3. On the server: `tailscale serve --bg --https=443 http://127.0.0.1:8098`.
+4. ACL: members reach `tag:monitor` on `tcp:443` instead of `tcp:8098`. The report
+   grant is unchanged.
+5. Google Cloud console, in a project owned by the Workspace:
+   - OAuth consent screen: user type **Internal**, scopes `openid` and `email`.
+   - Credentials → OAuth client ID → **Web application**. Authorized redirect URI:
+     `https://<machine>.<tailnet>.ts.net/auth/callback`. No JavaScript origins.
+6. Put the client ID in `google_login.client_id`, the secret in
+   `MPINFRA_GOOGLE_CLIENT_SECRET`, and a fresh `mpinfra token` value in
+   `MPINFRA_SESSION_KEY`. Restart.
+
+`serve` must reach `oauth2.googleapis.com` over HTTPS. The browser alone talks to
+`accounts.google.com`. Behind `tailscale serve` the log's `tailnet=` field shows
+`local`; `viewer=` is the Google account. Changing `MPINFRA_SESSION_KEY` signs
+everyone out. Removing someone from the allow list locks them out after a restart.
 
 ## Rollback
 

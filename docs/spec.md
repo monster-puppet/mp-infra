@@ -87,7 +87,9 @@ server stores the payload as received and adds its own probe checks next to it.
 - **Tailnet only.** `serve` binds to the Tailscale IP. A startup check refuses to bind to
   `0.0.0.0` or a public address unless `-insecure-bind` is passed.
 - **Viewer identity** comes from the Tailscale LocalAPI `whois` on the remote address.
-  The app shows who is viewing and logs every request. There are no login forms.
+  The app shows who is viewing and logs every request. Optional Google sign-in
+  (`google_login`, deploy.md §8) adds a second gate on top of the tailnet; then the
+  viewer is the Google account.
 - **Tailscale ACL:** a new tag `tag:monitor` for the serve host. Members may reach it on the
   UI port. Every reporting host, `tag:ci-untrusted` included, may reach only its
   `/api/report` port. Changing the ACL is a manual step for Marcus (see deploy.md).

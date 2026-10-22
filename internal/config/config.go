@@ -46,7 +46,28 @@ type Server struct {
 	DO         DigitalOcean `yaml:"digitalocean"`
 	Notion     Notion       `yaml:"notion"`
 	Alerts     Alerts       `yaml:"alerts"`
+	// GoogleLogin, when client_id is set, puts the UI behind Google sign-in on top
+	// of the tailnet. /healthz and /api/status.json stay open on the tailnet.
+	GoogleLogin GoogleLogin `yaml:"google_login"`
 }
+
+// GoogleLogin configures Google (OpenID Connect) sign-in for the UI. The redirect
+// URI registered with Google is base_url + "/auth/callback".
+type GoogleLogin struct {
+	ClientID        string `yaml:"client_id"`
+	ClientSecretEnv string `yaml:"client_secret_env"`
+	// SessionKeyEnv names the env var holding the key that signs session cookies
+	// (at least 32 characters, e.g. from `mpinfra token`).
+	SessionKeyEnv string `yaml:"session_key_env"`
+	// AllowedDomain admits any verified account of that Google Workspace domain.
+	AllowedDomain string `yaml:"allowed_domain"`
+	// AllowedEmails admits these addresses as well, whatever their domain.
+	AllowedEmails []string      `yaml:"allowed_emails"`
+	SessionTTL    time.Duration `yaml:"session_ttl"`
+}
+
+// Enabled reports whether Google sign-in is configured.
+func (g GoogleLogin) Enabled() bool { return g.ClientID != "" }
 
 type Host struct {
 	Name                string `yaml:"name"`
@@ -171,6 +192,9 @@ func LoadServer(path string) (*Server, error) {
 			return nil, fmt.Errorf("%s: digest_at must be HH:MM", path)
 		}
 	}
+	if err := c.checkGoogle(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	seen := map[string]bool{}
 	for _, h := range c.Hosts {
 		if !HostName.MatchString(h.Name) {
@@ -185,6 +209,29 @@ func LoadServer(path string) (*Server, error) {
 		seen[h.Name] = true
 	}
 	return &c, nil
+}
+
+// checkGoogle validates google_login. Google accepts an http redirect URI only on
+// localhost, so anything else must be https (e.g. a ts.net name from tailscale serve).
+func (c *Server) checkGoogle() error {
+	g := c.GoogleLogin
+	if !g.Enabled() {
+		return nil
+	}
+	if g.ClientSecretEnv == "" || g.SessionKeyEnv == "" {
+		return errors.New("google_login needs client_secret_env and session_key_env")
+	}
+	if g.AllowedDomain == "" && len(g.AllowedEmails) == 0 {
+		return errors.New("google_login needs allowed_domain or allowed_emails")
+	}
+	u, err := url.Parse(c.BaseURL)
+	if err != nil || u.Host == "" || u.Path != "" && u.Path != "/" {
+		return errors.New("google_login needs base_url as scheme://host[:port], with no path")
+	}
+	if u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1")) {
+		return errors.New("google_login needs an https base_url (Google allows http only for localhost)")
+	}
+	return nil
 }
 
 // ServeHost is the pseudo-host that holds checks not tied to one host (certs, DNS,
@@ -238,6 +285,9 @@ func (c *Server) ApplyDefaults() {
 	}
 	if c.Notion.APIURL == "" {
 		c.Notion.APIURL = "https://api.notion.com"
+	}
+	if c.GoogleLogin.SessionTTL == 0 {
+		c.GoogleLogin.SessionTTL = 7 * 24 * time.Hour
 	}
 	if c.Jenkins.BreakglassHost == "" {
 		c.Jenkins.BreakglassHost = "jenkins-win"

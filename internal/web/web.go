@@ -35,9 +35,10 @@ var staticFS embed.FS
 
 // Web holds the handlers.
 type Web struct {
-	srv   *server.Server
-	who   Whoiser
-	pages map[string]*template.Template
+	srv    *server.Server
+	who    Whoiser
+	google *GoogleAuth // nil: no sign-in, the tailnet ACL is the only gate
+	pages  map[string]*template.Template
 }
 
 // New builds the handlers. who may be nil (viewer shown as their address).
@@ -52,11 +53,15 @@ func New(srv *server.Server, who Whoiser) *Web {
 		"checkURL": checkURL,
 		"pathEsc":  url.PathEscape,
 	}
-	for _, page := range []string{"home", "check", "history", "error"} {
+	for _, page := range []string{"home", "check", "history", "error", "signin"} {
 		w.pages[page] = template.Must(template.New("layout.html").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", "templates/"+page+".html"))
 	}
 	return w
 }
+
+// RequireGoogle puts every UI page except the open ones behind Google sign-in.
+// Call it before UI.
+func (w *Web) RequireGoogle(g *GoogleAuth) { w.google = g }
 
 func checkURL(host, id string) string {
 	return "/check/" + url.PathEscape(host) + "/" + url.PathEscape(id)
@@ -76,7 +81,13 @@ func (w *Web) UI() http.Handler {
 	mux.HandleFunc("POST /check/{host}/{id}/unack", w.sameOrigin(w.unack))
 	mux.HandleFunc("POST /check/{host}/{id}/accept", w.sameOrigin(w.accept))
 	mux.HandleFunc("GET /history", w.history)
-	return w.logged(secure(mux))
+	if w.google == nil {
+		return w.logged(secure(mux))
+	}
+	mux.HandleFunc("GET /auth/login", w.google.login)
+	mux.HandleFunc("GET /auth/callback", w.callback)
+	mux.HandleFunc("POST /auth/logout", w.sameOrigin(w.logout))
+	return w.logged(secure(w.google.require(mux)))
 }
 
 // Reports returns the handler for the report port: one endpoint, nothing else.
@@ -104,8 +115,8 @@ func secure(h http.Handler) http.Handler {
 	})
 }
 
-// sameOrigin rejects cross-site form posts. There is no login, so this is the
-// CSRF defence: a page elsewhere must not be able to acknowledge an alert.
+// sameOrigin rejects cross-site form posts. It is the CSRF defence, with or
+// without Google sign-in: a page elsewhere must not be able to acknowledge an alert.
 func (w *Web) sameOrigin(h http.HandlerFunc) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		if site := r.Header.Get("Sec-Fetch-Site"); site != "" {
@@ -143,14 +154,22 @@ func viewer(r *http.Request) string {
 	return v
 }
 
-// logged resolves the viewer and logs every request with who made it.
+// logged resolves the viewer and logs every request with who made it. With Google
+// sign-in the viewer is the signed-in account and the tailnet identity is logged too.
 func (w *Web) logged(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		who := w.who.Whois(r.Context(), r.RemoteAddr)
+		ctx := r.Context()
+		viewer, extra := who, ""
+		if w.google != nil {
+			email := w.google.session(r)
+			ctx = context.WithValue(ctx, signedInKey{}, email)
+			viewer, extra = email, fmt.Sprintf(" tailnet=%q", who)
+		}
 		sw := &statusWriter{ResponseWriter: rw, code: 200}
-		h.ServeHTTP(sw, r.WithContext(context.WithValue(r.Context(), viewerKey{}, who)))
-		log.Printf("%s %s %s %d %s viewer=%q", r.RemoteAddr, r.Method, r.URL.Path, sw.code, time.Since(start).Round(time.Millisecond), who)
+		h.ServeHTTP(sw, r.WithContext(context.WithValue(ctx, viewerKey{}, viewer)))
+		log.Printf("%s %s %s %d %s viewer=%q%s", r.RemoteAddr, r.Method, r.URL.Path, sw.code, time.Since(start).Round(time.Millisecond), viewer, extra)
 	})
 }
 
@@ -198,16 +217,18 @@ func (w *Web) report(rw http.ResponseWriter, r *http.Request) {
 // --- pages ---
 
 type page struct {
-	Title   string
-	Section string
-	Viewer  string
-	Refresh bool
-	Version string
-	Data    any
+	Title    string
+	Section  string
+	Viewer   string
+	SignedIn bool // Google sign-in is on and the viewer is signed in
+	Refresh  bool
+	Version  string
+	Data     any
 }
 
 func (w *Web) render(rw http.ResponseWriter, r *http.Request, name string, code int, p page) {
 	p.Viewer = viewer(r)
+	p.SignedIn = signedIn(r) != ""
 	p.Version = w.srv.Version
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 	rw.WriteHeader(code)

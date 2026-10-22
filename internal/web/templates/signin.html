@@ -1,0 +1,7 @@
+{{define "content"}}
+<section class="card signin">
+  <h1>Sign in</h1>
+  {{if .Data}}<p>{{.Data}}</p>{{end}}
+  <p><a class="btn btn-primary" href="/auth/login">Sign in with Google</a></p>
+</section>
+{{end}}

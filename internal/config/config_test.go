@@ -33,9 +33,26 @@ func TestLoadServerRejects(t *testing.T) {
 		"hosts: [{name: A}]",
 		"hosts: [{name: a}, {name: a}]",
 		"stale_after: 10s",
+		// google_login: missing env names, no allow list, http base_url, base_url with a path
+		"base_url: https://ui.example.ts.net\ngoogle_login: {client_id: x, allowed_domain: example.com}",
+		"base_url: https://ui.example.ts.net\ngoogle_login: {client_id: x, client_secret_env: S, session_key_env: K}",
+		"base_url: http://100.64.0.1:8098\ngoogle_login: {client_id: x, client_secret_env: S, session_key_env: K, allowed_domain: example.com}",
+		"base_url: https://ui.example.ts.net/mp\ngoogle_login: {client_id: x, client_secret_env: S, session_key_env: K, allowed_domain: example.com}",
 	} {
 		if _, err := LoadServer(write(t, body)); err == nil {
 			t.Errorf("LoadServer(%q) = nil error", body)
+		}
+	}
+}
+
+func TestLoadServerGoogle(t *testing.T) {
+	for _, base := range []string{"https://ui.example.ts.net", "https://ui.example.ts.net/", "http://localhost:8098"} {
+		c, err := LoadServer(write(t, "base_url: "+base+"\ngoogle_login: {client_id: x, client_secret_env: S, session_key_env: K, allowed_emails: [a@example.com]}"))
+		if err != nil {
+			t.Fatalf("%s: %v", base, err)
+		}
+		if !c.GoogleLogin.Enabled() || c.GoogleLogin.SessionTTL != 7*24*time.Hour {
+			t.Fatalf("%s: %+v", base, c.GoogleLogin)
 		}
 	}
 }

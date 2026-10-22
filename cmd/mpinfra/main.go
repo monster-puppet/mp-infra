@@ -119,6 +119,14 @@ func serve(args []string) error {
 		log.Printf("tailscaled socket not found; viewers are shown by address")
 	}
 	w := web.New(srv, who)
+	if cfg.GoogleLogin.Enabled() {
+		g, err := web.NewGoogleAuth(cfg)
+		if err != nil {
+			return err
+		}
+		w.RequireGoogle(g)
+		log.Printf("UI requires Google sign-in; redirect URI %s", g.RedirectURL)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

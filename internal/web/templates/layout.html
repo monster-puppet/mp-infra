@@ -22,7 +22,14 @@
       <span class="nav-label">History</span>
     </a>
   </div>
+  {{if .SignedIn}}
+  <form class="nav-user" method="post" action="/auth/logout">
+    <span title="Google account">{{.Viewer}}</span>
+    <button type="submit" class="link-button">Sign out</button>
+  </form>
+  {{else}}
   <div class="nav-user" title="Tailscale identity">{{.Viewer}}</div>
+  {{end}}
 </nav>
 <main class="container">
 {{template "content" .}}

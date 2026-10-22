@@ -105,3 +105,15 @@ alerts:
   digest_at: "08:00"
 
 report_tokens_env: MPINFRA_REPORT_TOKENS
+
+# Google sign-in on top of the tailnet (docs/deploy.md §8). Needs an https base_url,
+# e.g. ui_addr: "127.0.0.1:8098" behind `tailscale serve`, and
+# base_url: "https://MONITOR_HOST.TAILNET_NAME.ts.net". Redirect URI to register
+# with Google: base_url + /auth/callback. /healthz and /api/status.json stay open.
+# google_login:
+#   client_id: "GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+#   client_secret_env: MPINFRA_GOOGLE_CLIENT_SECRET
+#   session_key_env: MPINFRA_SESSION_KEY     # 32+ chars; `mpinfra token` prints one
+#   allowed_domain: "EXAMPLE_DOMAIN"         # Google Workspace domain (hd claim)
+#   allowed_emails: []                       # extra accounts outside the domain
+#   session_ttl: 168h
