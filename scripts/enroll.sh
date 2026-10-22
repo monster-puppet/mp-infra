@@ -17,12 +17,16 @@
 # Running it again for a host replaces that host's token; other hosts are kept.
 # Tokens are never printed or stored on this machine.
 #
+# Every NAME must already be listed under hosts: in the server config, because the
+# server refuses to start with a token for an unknown host.
+#
 # Env overrides: REPORT_PORT (8099), ENV_FILE (/etc/mp-infra/env),
-# TOKENS_VAR (MPINFRA_REPORT_TOKENS).
+# CONFIG_FILE (/etc/mp-infra/config.yaml), TOKENS_VAR (MPINFRA_REPORT_TOKENS).
 set -euo pipefail
 
 REPORT_PORT=${REPORT_PORT:-8099}
 ENV_FILE=${ENV_FILE:-/etc/mp-infra/env}
+CONFIG_FILE=${CONFIG_FILE:-/etc/mp-infra/config.yaml}
 TOKENS_VAR=${TOKENS_VAR:-MPINFRA_REPORT_TOKENS}
 
 if [ $# -lt 2 ]; then
@@ -77,10 +81,17 @@ for arg in "$@"; do
 done
 
 say "Registering ${#NAMES[@]} token(s) on the server and restarting it"
-ssh "$SERVER" "sudo sh -s -- '$ENV_FILE' '$TOKENS_VAR' ${PAIRS[*]}" <<'REMOTE'
+ssh "$SERVER" "sudo sh -s -- '$ENV_FILE' '$TOKENS_VAR' '$CONFIG_FILE' ${PAIRS[*]}" <<'REMOTE'
 set -e
-f=$1; var=$2; shift 2
+f=$1; var=$2; cfg=$3; shift 3
+# The server refuses to start with a token for a host it does not know.
+for pair in "$@"; do
+  h=${pair%%=*}
+  grep -Eq "^[[:space:]]*-[[:space:]]*name:[[:space:]]*\"?$h\"?[[:space:]]*$" "$cfg" || {
+    echo "host '$h' is not listed under hosts: in $cfg. Add it there first; nothing was changed."; exit 1; }
+done
 [ -f "$f" ] || { install -m 0640 /dev/null "$f"; chgrp mpinfra "$f" 2>/dev/null || true; }
+cp -p "$f" "$f.enroll-bak"
 cur=$(grep "^$var=" "$f" | tail -1 | cut -d= -f2-)
 new=$cur
 for pair in "$@"; do
@@ -92,8 +103,13 @@ done
 chown --reference="$f" "$f.tmp"; chmod --reference="$f" "$f.tmp"; mv "$f.tmp" "$f"
 since=$(date '+%Y-%m-%d %H:%M:%S')
 systemctl restart mpinfra
-sleep 2
-systemctl is-active --quiet mpinfra || { journalctl -u mpinfra -n 20 --no-pager; exit 1; }
+sleep 3
+if ! systemctl is-active --quiet mpinfra; then
+  journalctl -u mpinfra --since "$since" --no-pager | tail -5
+  echo "the server did not start with the new tokens; restoring $f and restarting"
+  mv "$f.enroll-bak" "$f"; systemctl restart mpinfra; exit 1
+fi
+rm -f "$f.enroll-bak"
 # Only this start's lines: an older "no report tokens" warning must not fail the run.
 if journalctl -u mpinfra --since "$since" --no-pager | grep -q 'no report tokens'; then
   echo "the server says it has no report tokens: check $f and the unit's EnvironmentFile"; exit 1
