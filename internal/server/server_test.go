@@ -92,18 +92,19 @@ func TestSweepStale(t *testing.T) {
 	if _, ok := got["c/report.fresh"]; ok {
 		t.Error("no_report host swept")
 	}
-	if len(snk.msgs) != 3 {
-		t.Errorf("alerts = %d, want 3", len(snk.msgs))
+	// One message for the sweep, a's stale host.uptime folded into its line.
+	if len(snk.msgs) != 1 || snk.msgs[0].Subject != "[STALE] 2 hosts: 2 stopped reporting" {
+		t.Errorf("alerts = %+v", snk.msgs)
 	}
 
 	// Sweeping again sends nothing new; a fresh report recovers.
 	s.Sweep(ctx)
-	if len(snk.msgs) != 3 {
+	if len(snk.msgs) != 1 {
 		t.Errorf("repeated alerts: %d", len(snk.msgs))
 	}
 	s.Ingest(ctx, "a", []byte(`{}`), payload("a", report.Check{ID: "host.uptime", State: eval.OK}))
-	if len(snk.msgs) != 5 {
-		t.Errorf("recovery alerts = %d, want 5", len(snk.msgs))
+	if len(snk.msgs) != 2 || snk.msgs[1].Subject != "[RECOVERED] a reporting again (1 check back to ok)" {
+		t.Errorf("recovery alerts = %+v", snk.msgs)
 	}
 }
 

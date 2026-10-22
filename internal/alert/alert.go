@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/smtp"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -24,10 +23,12 @@ import (
 	"github.com/monster-puppet/mp-infra/internal/store"
 )
 
-// Message is one alert.
+// Message is one alert. Text is plain text, for mail. Blocks is the Slack layout of
+// the same content; Slack falls back to Subject and Text when it is empty.
 type Message struct {
 	Subject string
 	Text    string
+	Blocks  []slackBlock
 }
 
 // Sender delivers a message on one channel.
@@ -64,7 +65,12 @@ func slackEscape(s string) string {
 }
 
 func (s *Slack) Send(ctx context.Context, m Message) error {
-	body, _ := json.Marshal(map[string]string{"text": "*" + slackEscape(m.Subject) + "*\n" + slackEscape(m.Text)})
+	payload := map[string]any{"text": "*" + slackEscape(m.Subject) + "*\n" + slackEscape(m.Text)}
+	if len(m.Blocks) > 0 {
+		// text is then only the notification preview.
+		payload = map[string]any{"text": slackEscape(m.Subject), "blocks": m.Blocks}
+	}
+	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.URL, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -206,65 +212,46 @@ func (a *Alerter) now() time.Time {
 	return time.Now()
 }
 
-func (a *Alerter) link(host, id string) string {
-	if a.BaseURL == "" {
-		return ""
-	}
-	return strings.TrimRight(a.BaseURL, "/") + "/check/" + url.PathEscape(host) + "/" + url.PathEscape(id)
-}
-
-func label(s eval.State) string {
-	if s == "" {
-		return "new"
-	}
-	return string(s)
-}
-
-// Format builds the message for a transition.
-func (a *Alerter) Format(t store.Transition, kind eval.AlertKind) Message {
-	tag := strings.ToUpper(string(t.NewState))
-	if kind == eval.Recovery {
-		tag = "RECOVERED"
-	}
-	if kind == eval.Reminder {
-		tag = "STILL " + tag
-	}
-	subj := fmt.Sprintf("[%s] %s %s", tag, t.Host, t.CheckID)
-	text := fmt.Sprintf("%s · %s: %s → %s\n%s", t.Host, t.CheckID, label(t.OldState), label(t.NewState), t.Summary)
-	if kind == eval.Reminder {
-		text = fmt.Sprintf("%s · %s has been %s since %s\n%s", t.Host, t.CheckID, t.NewState, t.At.Local().Format("2006-01-02 15:04"), t.Summary)
-	}
-	if l := a.link(t.Host, t.CheckID); l != "" {
-		text += "\n" + l
-	}
-	return Message{Subject: subj, Text: text}
-}
-
-// Transitions sends alerts for the transitions that call for one.
+// Transitions sends one message for the transitions that call for an alert, so a
+// host that stops reporting is one post, not one per check.
 func (a *Alerter) Transitions(ctx context.Context, ts []store.Transition) {
+	var items []Item
+	var recs []store.Alert
 	for _, t := range ts {
 		kind := eval.Classify(t.OldState, t.NewState)
 		if kind == eval.NoAlert {
 			continue
 		}
-		a.send(ctx, t.ID, t.Host, t.CheckID, kind, a.Format(t, kind))
+		items = append(items, Item{Host: t.Host, CheckID: t.CheckID, Kind: kind, Old: t.OldState, New: t.NewState, Summary: t.Summary})
+		recs = append(recs, store.Alert{TransitionID: t.ID, Host: t.Host, CheckID: t.CheckID, Kind: kind})
+	}
+	if len(items) > 0 {
+		a.send(ctx, a.compose(items, ""), recs)
 	}
 }
 
-func (a *Alerter) send(ctx context.Context, tid int64, host, id string, kind eval.AlertKind, m Message) {
+// send delivers m on every channel and records one alert per check it covers.
+func (a *Alerter) send(ctx context.Context, m Message, recs []store.Alert) {
+	record := func(channel string, err error) {
+		for _, r := range recs {
+			r.Channel, r.At = channel, a.now()
+			if err != nil {
+				r.Error = err.Error()
+			}
+			a.Store.RecordAlert(ctx, r)
+		}
+	}
 	if len(a.Senders) == 0 {
 		log.Printf("alert (no channel configured): %s", m.Subject)
-		a.Store.RecordAlert(ctx, store.Alert{TransitionID: tid, Host: host, CheckID: id, Channel: "none", Kind: kind, At: a.now()})
+		record("none", nil)
 		return
 	}
 	for _, s := range a.Senders {
 		err := s.Send(ctx, m)
-		rec := store.Alert{TransitionID: tid, Host: host, CheckID: id, Channel: s.Name(), Kind: kind, At: a.now()}
 		if err != nil {
-			rec.Error = err.Error()
 			log.Printf("alert via %s failed: %v", s.Name(), err)
 		}
-		a.Store.RecordAlert(ctx, rec)
+		record(s.Name(), err)
 	}
 }
 
@@ -279,6 +266,8 @@ func (a *Alerter) Reminders(ctx context.Context) error {
 		return err
 	}
 	now := a.now()
+	var items []Item
+	var recs []store.Alert
 	for _, c := range checks {
 		if !c.State.Bad() || c.Acked(now) || now.Sub(c.Since) < a.Reminder {
 			continue
@@ -290,8 +279,11 @@ func (a *Alerter) Reminders(ctx context.Context) error {
 		if !last.IsZero() && now.Sub(last) < a.Reminder {
 			continue
 		}
-		t := store.Transition{Host: c.Host, CheckID: c.ID, NewState: c.State, Summary: c.Summary, At: c.Since}
-		a.send(ctx, 0, c.Host, c.ID, eval.Reminder, a.Format(t, eval.Reminder))
+		items = append(items, Item{Host: c.Host, CheckID: c.ID, Kind: eval.Reminder, New: c.State, Summary: c.Summary, Since: c.Since})
+		recs = append(recs, store.Alert{Host: c.Host, CheckID: c.ID, Kind: eval.Reminder})
+	}
+	if len(items) > 0 {
+		a.send(ctx, a.compose(items, ""), recs)
 	}
 	return nil
 }
@@ -323,26 +315,20 @@ func (a *Alerter) Digest(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	var lines []string
+	var items []Item
 	for _, c := range checks {
 		if c.State != eval.Warn {
 			continue
 		}
-		line := fmt.Sprintf("• %s · %s: %s", c.Host, c.ID, c.Summary)
+		it := Item{Host: c.Host, CheckID: c.ID, New: eval.Warn, Summary: c.Summary}
 		if c.Acked(now) {
-			line += fmt.Sprintf(" (acknowledged until %s by %s)", c.AckUntil.Local().Format("2006-01-02"), c.AckBy)
+			it.Note = fmt.Sprintf("acknowledged until %s by %s", c.AckUntil.Local().Format("2006-01-02"), c.AckBy)
 		}
-		lines = append(lines, line)
+		items = append(items, it)
 	}
-	if len(lines) == 0 {
+	if len(items) == 0 {
 		return nil
 	}
-	sort.Strings(lines)
-	text := strings.Join(lines, "\n")
-	if a.BaseURL != "" {
-		text += "\n" + strings.TrimRight(a.BaseURL, "/") + "/"
-	}
-	a.send(ctx, 0, config.ServeHost, "digest", eval.Reminder,
-		Message{Subject: fmt.Sprintf("[DIGEST] %d warning(s) %s", len(lines), today), Text: text})
+	a.send(ctx, a.compose(items, today), []store.Alert{{Host: config.ServeHost, CheckID: "digest", Kind: eval.Reminder}})
 	return nil
 }

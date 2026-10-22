@@ -3,6 +3,7 @@ package alert
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -53,18 +54,63 @@ func TestTransitions(t *testing.T) {
 		{ID: 3, Host: "jenkins", CheckID: "host.uptime", OldState: eval.Stale, NewState: eval.OK},
 	}
 	a.Transitions(ctx, tr)
-	if len(f.msgs) != 2 {
-		t.Fatalf("sent %d, want 2: %+v", len(f.msgs), f.msgs)
+	if len(f.msgs) != 1 {
+		t.Fatalf("sent %d, want 1: %+v", len(f.msgs), f.msgs)
 	}
-	if f.msgs[0].Subject != "[CRIT] monster-p4 p4.checkpoint" || !strings.Contains(f.msgs[0].Text, "ok → crit") ||
-		!strings.Contains(f.msgs[0].Text, "http://100.64.0.1:8098/check/monster-p4/p4.checkpoint") {
-		t.Errorf("problem message: %+v", f.msgs[0])
+	m := f.msgs[0]
+	if m.Subject != "[CRIT] 2 hosts: 1 crit, 1 recovered" || !strings.Contains(m.Text, "ok → crit") ||
+		!strings.Contains(m.Text, "http://100.64.0.1:8098/check/monster-p4/p4.checkpoint") {
+		t.Errorf("message: %+v", m)
 	}
-	if !strings.HasPrefix(f.msgs[1].Subject, "[RECOVERED]") {
-		t.Errorf("recovery message: %+v", f.msgs[1])
+	// monster-p4 (crit) comes before jenkins (recovered).
+	if p4, j := strings.Index(m.Text, "monster-p4"), strings.Index(m.Text, "jenkins"); p4 > j {
+		t.Errorf("worst host not first:\n%s", m.Text)
 	}
-	if last, _ := s.LastAlert(ctx, "monster-p4", "p4.checkpoint"); !last.Equal(t0.Truncate(time.Second)) {
-		t.Errorf("not recorded: %s", last)
+	for _, id := range []string{"p4.checkpoint", "host.uptime"} {
+		if last, _ := s.LastAlert(ctx, map[string]string{"p4.checkpoint": "monster-p4", "host.uptime": "jenkins"}[id], id); !last.Equal(t0.Truncate(time.Second)) {
+			t.Errorf("%s not recorded: %s", id, last)
+		}
+	}
+
+	f.msgs = nil
+	a.Transitions(ctx, tr[:1])
+	if len(f.msgs) != 1 || f.msgs[0].Subject != "[CRIT] monster-p4 p4.checkpoint" {
+		t.Errorf("single: %+v", f.msgs)
+	}
+}
+
+// A host that stops reporting is one line, not one per check.
+func TestHostDownFolds(t *testing.T) {
+	a, f, _ := setup(t)
+	tr := []store.Transition{{ID: 1, Host: "jenkins", CheckID: "report.fresh", OldState: eval.OK, NewState: eval.Stale, Summary: "no report for 20m"}}
+	for i, id := range []string{"disk.root", "host.uptime", "jenkins.queue"} {
+		tr = append(tr, store.Transition{ID: int64(i + 2), Host: "jenkins", CheckID: id, OldState: eval.OK, NewState: eval.Stale, Summary: "no report from jenkins"})
+	}
+	a.Transitions(context.Background(), tr)
+	if len(f.msgs) != 1 {
+		t.Fatalf("sent %d", len(f.msgs))
+	}
+	m := f.msgs[0]
+	if m.Subject != "[STALE] jenkins stopped reporting (3 checks stale)" {
+		t.Errorf("subject %q", m.Subject)
+	}
+	b, _ := json.Marshal(m.Blocks)
+	if strings.Contains(string(b), "disk.root") {
+		t.Errorf("stale checks not folded: %s", b)
+	}
+
+	// Back again: folded the same way, but a check that came back crit is listed.
+	f.msgs = nil
+	tr = []store.Transition{
+		{Host: "jenkins", CheckID: "report.fresh", OldState: eval.Stale, NewState: eval.OK},
+		{Host: "jenkins", CheckID: "disk.root", OldState: eval.Stale, NewState: eval.OK},
+		{Host: "jenkins", CheckID: "host.uptime", OldState: eval.Stale, NewState: eval.Crit, Summary: "rebooted"},
+	}
+	a.Transitions(context.Background(), tr)
+	b, _ = json.Marshal(f.msgs[0].Blocks)
+	if f.msgs[0].Subject != "[CRIT] jenkins: 1 crit, 1 reporting again" || !strings.Contains(string(b), "host.uptime") ||
+		strings.Contains(string(b), "disk.root") || !strings.Contains(string(b), "1 check back to ok") {
+		t.Errorf("%s\n%s", f.msgs[0].Subject, b)
 	}
 }
 
@@ -111,6 +157,7 @@ func TestDigest(t *testing.T) {
 
 func TestSlack(t *testing.T) {
 	var got map[string]string
+	var raw []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewDecoder(r.Body).Decode(&got)
 	}))
@@ -121,6 +168,20 @@ func TestSlack(t *testing.T) {
 	}
 	if strings.Contains(got["text"], "<!channel>") || !strings.Contains(got["text"], "&lt;!channel&gt; &amp;") {
 		t.Errorf("not escaped: %q", got["text"])
+	}
+
+	srv.Close()
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ = io.ReadAll(r.Body)
+	}))
+	a := &Alerter{BaseURL: "http://100.64.0.1:8098", Now: func() time.Time { return t0 }}
+	m := a.compose([]Item{{Host: "h", CheckID: "x", Kind: eval.Problem, Old: eval.OK, New: eval.Crit, Summary: "<!channel> & <http://evil|click>"}}, "")
+	if err := (&Slack{URL: srv.URL}).Send(context.Background(), m); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "<!channel>") || !strings.Contains(string(raw), `"blocks"`) ||
+		!strings.Contains(string(raw), `\u0026lt;!channel\u0026gt;`) {
+		t.Errorf("blocks not escaped: %s", raw)
 	}
 
 	srv.Close()
