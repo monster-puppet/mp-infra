@@ -1,4 +1,19 @@
-# Getting the hosts to report: step by step
+# Getting the hosts to report
+
+## The quick way
+
+From a checkout of this repo, on a machine that can `ssh` to the server and to
+every host (and has Go, for `make dist`):
+
+```sh
+scripts/enroll.sh mp-infra monster-p4 jenkins jenkins-win
+```
+
+The first name is the server, the rest are the hosts, all as you `ssh` to them. If a
+host's ssh name differs from its mp-infra name, write `NAME=SSHNAME`. It prints `OK`
+or `FAIL` per host. The manual steps below are what the script does.
+
+## By hand
 
 There are two kinds of machine:
 
