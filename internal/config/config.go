@@ -341,8 +341,9 @@ func (c *Server) checkGoogle() error {
 const ServeHost = "serve"
 
 // DefaultScanPorts is scanned on each public IP when scan_ports is not set.
-var DefaultScanPorts = []int{21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 443, 445, 1433, 1666, 2375, 3306,
-	3389, 5432, 5900, 5985, 5986, 6379, 8080, 8098, 8099, 8443, 9000, 9200, 11211, 27017, 50000, 50001}
+// 1999 is the SDP p4broker and 9090 Cockpit, both enabled in firewalld on Rocky.
+var DefaultScanPorts = []int{21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 443, 445, 1433, 1666, 1999, 2375, 3306,
+	3389, 5432, 5900, 5985, 5986, 6379, 8080, 8098, 8099, 8443, 9000, 9090, 9200, 11211, 27017, 50000, 50001}
 
 // ApplyDefaults fills zero values with the spec defaults. LoadServer calls it.
 func (c *Server) ApplyDefaults() {
