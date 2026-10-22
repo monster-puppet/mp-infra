@@ -1120,13 +1120,3 @@ pre.data {
 
 .lg-chip-bad { background: var(--crit); border-color: var(--crit); color: var(--on-primary); }
 .lg-chip-closed { border-style: dashed; border-color: var(--warn); color: var(--warn); text-decoration: line-through; }
-
-.lg-arc {
-  display: inline-block;
-  width: 0.7rem;
-  height: 0.8rem;
-  margin: 0 0.3rem -0.15rem 0.6rem;
-  border: 2px solid var(--text-muted);
-  border-left: none;
-  border-radius: 0 0.5rem 0.5rem 0;
-}
