@@ -53,6 +53,8 @@ type Server struct {
 	Jenkins    Jenkins      `yaml:"jenkins"`
 	DO         DigitalOcean `yaml:"digitalocean"`
 	Notion     Notion       `yaml:"notion"`
+	// Notices reads vendors' public security feeds (see Notices).
+	Notices Notices `yaml:"notices"`
 	Alerts     Alerts       `yaml:"alerts"`
 	// GoogleLogin, when client_id is set, puts the UI behind Google sign-in on top
 	// of the tailnet. /healthz and /api/status.json stay open on the tailnet.
@@ -193,6 +195,75 @@ type Notion struct {
 	APIURL       string `yaml:"api_url"`
 }
 
+// Notices turns vendors' public security feeds into notice.<name> checks on serve.
+// Off unless enabled. With no feeds listed, DefaultNoticeFeeds are read.
+type Notices struct {
+	Enabled bool         `yaml:"enabled"`
+	Feeds   []NoticeFeed `yaml:"feeds"`
+	// Interval is how often a feed is fetched (default 1 h); the CISA catalogue
+	// and the Jenkins update centre are fetched every SlowInterval (default 6 h).
+	Interval     time.Duration `yaml:"interval"`
+	SlowInterval time.Duration `yaml:"slow_interval"`
+	// KEV is CISA's Known Exploited Vulnerabilities catalogue; entries whose vendor
+	// or product contains one of KEVProducts (whole words) become notice.kev.
+	KEVDisabled bool     `yaml:"kev_disabled"`
+	KEVURL      string   `yaml:"kev_url"`
+	KEVProducts []string `yaml:"kev_products"`
+	// JenkinsWarnings matches the Jenkins update centre's security warnings
+	// against the core and plugins installed (needs the jenkins section).
+	JenkinsWarnings bool   `yaml:"jenkins_warnings"`
+	UpdateCenterURL string `yaml:"update_center_url"`
+}
+
+// NoticeFeed is one RSS or Atom feed of security notices.
+type NoticeFeed struct {
+	Name string `yaml:"name"` // check id notice.<name>
+	URL  string `yaml:"url"`
+	// State is what unaccepted notices make the check: warn or crit.
+	State string `yaml:"state"`
+	// Tag keeps only items with this category, term or php:tag.
+	Tag string `yaml:"tag"`
+	// Title keeps only items whose title matches this regular expression.
+	Title string `yaml:"title"`
+}
+
+// DefaultNoticeFeeds are read when notices.feeds is empty. exe.dev and Tailscale
+// are crit: rare, and always about something we run.
+var DefaultNoticeFeeds = []NoticeFeed{
+	{Name: "exe-dev", URL: "https://exe.dev/security/atom.xml", State: "crit"},
+	{Name: "tailscale", URL: "https://tailscale.com/security-bulletins/index.xml", State: "crit"},
+	{Name: "jenkins", URL: "https://www.jenkins.io/security/advisories/rss.xml", State: "warn"},
+	{Name: "php", URL: "https://www.php.net/releases/feed.php", State: "warn", Tag: "security", Title: `^PHP 8\.3\.`},
+	{Name: "letsencrypt", URL: "https://community.letsencrypt.org/c/incidents/16.rss", State: "warn"},
+	{Name: "digitalocean", URL: "https://www.digitalocean.com/blog/rss", State: "warn", Tag: "trust-security"},
+}
+
+// DefaultKEVProducts is matched against KEV vendorProject and product.
+var DefaultKEVProducts = []string{"jenkins", "perforce", "php", "apache http server", "nginx", "openssh", "tailscale", "let's encrypt", "digitalocean"}
+
+func (n *Notices) check() error {
+	seen := map[string]bool{}
+	for _, f := range n.Feeds {
+		if !versionName.MatchString(f.Name) || f.Name == "kev" || strings.HasPrefix(f.Name, "jenkins.") {
+			return fmt.Errorf("notices: invalid feed name %q", f.Name)
+		}
+		if seen[f.Name] {
+			return fmt.Errorf("notices: duplicate feed %q", f.Name)
+		}
+		seen[f.Name] = true
+		if u, err := url.Parse(f.URL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			return fmt.Errorf("notices: feed %s: url must be http(s)", f.Name)
+		}
+		if f.State != "warn" && f.State != "crit" {
+			return fmt.Errorf("notices: feed %s: state must be warn or crit", f.Name)
+		}
+		if _, err := regexp.Compile(f.Title); err != nil {
+			return fmt.Errorf("notices: feed %s: title: %w", f.Name, err)
+		}
+	}
+	return nil
+}
+
 type Alerts struct {
 	SlackWebhookEnv string        `yaml:"slack_webhook_env"`
 	SMTPHost        string        `yaml:"smtp_host"`
@@ -225,6 +296,9 @@ func LoadServer(path string) (*Server, error) {
 		}
 	}
 	if err := c.checkGoogle(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	if err := c.Notices.check(); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	seen := map[string]bool{}
@@ -398,6 +472,21 @@ func (c *Server) ApplyDefaults() {
 	}
 	if c.Jenkins.BreakglassHost == "" {
 		c.Jenkins.BreakglassHost = "jenkins-win"
+	}
+	n := &c.Notices
+	if len(n.Feeds) == 0 {
+		n.Feeds = DefaultNoticeFeeds
+	}
+	def(&n.Interval, time.Hour)
+	def(&n.SlowInterval, 6*time.Hour)
+	if n.KEVURL == "" {
+		n.KEVURL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+	}
+	if len(n.KEVProducts) == 0 {
+		n.KEVProducts = DefaultKEVProducts
+	}
+	if n.UpdateCenterURL == "" {
+		n.UpdateCenterURL = "https://updates.jenkins.io/current/update-center.actual.json"
 	}
 }
 

@@ -119,6 +119,17 @@ notion:
   database_id: "OPSEC_DATABASE_ID"
   done_property: "Done"
 
+# Vendors' public security feeds -> notice.<name> checks on serve. No credentials.
+# With no feeds listed, the built-in list is read (exe.dev, Tailscale, Jenkins,
+# PHP 8.3, Let's Encrypt incidents, DigitalOcean trust-security posts).
+notices:
+  enabled: true
+  jenkins_warnings: true      # match the update centre's warnings to installed plugins (uses jenkins:)
+  # kev_products: [jenkins, perforce, php, "apache http server", nginx, openssh, tailscale]
+  # feeds:
+  #   - {name: exe-dev, url: "https://exe.dev/security/atom.xml", state: crit}
+  #   - {name: php, url: "https://www.php.net/releases/feed.php", state: warn, tag: security, title: '^PHP 8\.3\.'}
+
 alerts:
   slack_webhook_env: MPINFRA_SLACK_WEBHOOK
   smtp_host: "SMTP_HOST"

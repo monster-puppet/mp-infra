@@ -108,7 +108,7 @@ var CheckID = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,127}$`)
 // one is rejected, so a host cannot override a probe that watches it.
 var serverOwned = []string{
 	"ts.", "jenkins.", "ports.", "tls.", "dns.", "http.", "tcp.", "snapshot.",
-	"serve.", "opsec.", "report.", "win.breakglass",
+	"serve.", "opsec.", "report.", "win.breakglass", "notice.",
 }
 
 // ServerOwned reports whether id belongs to a server-side probe.

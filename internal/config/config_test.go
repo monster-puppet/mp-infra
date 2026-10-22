@@ -56,6 +56,14 @@ func TestLoadServerRejects(t *testing.T) {
 		"base_url: https://ui.example.ts.net\ngoogle_login: {client_id: x, client_secret_env: S, session_key_env: K}",
 		"base_url: http://100.64.0.1:8098\ngoogle_login: {client_id: x, client_secret_env: S, session_key_env: K, allowed_domain: example.com}",
 		"base_url: https://ui.example.ts.net/mp\ngoogle_login: {client_id: x, client_secret_env: S, session_key_env: K, allowed_domain: example.com}",
+		// notices: bad state, reserved or bad names, a non-http url, a bad title regexp, duplicates
+		"notices: {feeds: [{name: a, url: 'https://x', state: info}]}",
+		"notices: {feeds: [{name: kev, url: 'https://x', state: warn}]}",
+		"notices: {feeds: [{name: jenkins.installed, url: 'https://x', state: warn}]}",
+		"notices: {feeds: [{name: A, url: 'https://x', state: warn}]}",
+		"notices: {feeds: [{name: a, url: 'ftp://x', state: warn}]}",
+		"notices: {feeds: [{name: a, url: 'https://x', state: warn, title: '('}]}",
+		"notices: {feeds: [{name: a, url: 'https://x', state: warn}, {name: a, url: 'https://y', state: crit}]}",
 	} {
 		if _, err := LoadServer(write(t, body)); err == nil {
 			t.Errorf("LoadServer(%q) = nil error", body)

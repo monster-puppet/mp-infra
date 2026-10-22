@@ -1,0 +1,75 @@
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>exe.dev Security Bulletins</title>
+  <subtitle>Security bulletins from exe.dev</subtitle>
+  <link href="https://exe.dev/security/atom.xml" rel="self" />
+  <link href="https://exe.dev/security" />
+  <id>urn:uuid:a7c3e4b1-9f2d-4a1e-b8c6-3d5f7e9a1b2c</id>
+  <updated>2026-10-20T00:00:00Z</updated>
+  
+  <entry>
+    <title>Third-party: eMudhra CA cert compromise</title>
+    <link href="https://exe.dev/security/emudhra-compromise" />
+    <id>https://exe.dev/security/emudhra-compromise</id>
+    <updated>2026-10-20T00:00:00Z</updated>
+    <summary>Update your VMs to protect them from the eMudhra CA cert compromise.</summary>
+    <content type="xhtml">
+      <div xmlns="http://www.w3.org/1999/xhtml">
+        <p>Several CA certificates were recently compromised. See <a href="https://emudhra.we-have-a-problem.com/">https://emudhra.we-have-a-problem.com/</a> for the details.</p>
+<p>This is not an exe.dev-specific problem.</p>
+<p>This is a significant security risk for all software that uses the Internet, including services built on exe.dev VMs.</p>
+<p>We strongly recommend that all exe.dev customers:</p>
+<ol>
+<li>
+<p>Run <code>ssh exe.dev remediate-emudhra-compromise</code></p>
+<p>This will upgrade all the default software that ships with exe.dev VMs, on all of your VMs. It will report back about any VMs that could not be upgraded, typically VMs started with custom images.</p>
+<p>It is slow to run. If it is interrupted, it is safe to run multiple times.</p>
+<p>No SSH client? Run <code>remediate-emudhra-compromise</code> in the browser shell at <a href="https://exe.dev/shell">https://exe.dev/shell</a>.</p>
+<p>If you prefer more control, run <code>ssh exe.dev help remediate-emudhra-compromise</code>. This will print the recommended commands to be run on each VM.</p>
+<p>The opencode and pi coding agents bundle their own trusted certs and have not released updates. The command will report about them until upstream fixes ship.</p>
+</li>
+<li>
+<p>On each VM, ask Shelley or your favorite coding agent to remediate all the non-stock software running on your VM.</p>
+<p>Suggested prompt:</p>
+<pre class="code"><code>Please ensure that all custom software running on this VM is not vulnerable to the CA cert compromise detailed at https://emudhra.we-have-a-problem.com/.
+</code></pre></li>
+<li>
+<p>Restart your VMs.</p>
+<p>Most programs load trusted certs once, at startup. Restarting your VM ensures that all software is working with the correct certs.</p>
+<p>If you don't want to restart the VM, carefully restart all potentially affected software.</p>
+</li>
+</ol>
+
+      </div>
+    </content>
+    <author>
+      <name>exe.dev security team</name>
+      <email>security@exe.dev</email>
+    </author>
+  </entry>
+  
+  <entry>
+    <title>Shared VMs exposed all HTTP ports to share recipients</title>
+    <link href="https://exe.dev/security/over-sharing" />
+    <id>https://exe.dev/security/over-sharing</id>
+    <updated>2026-02-25T00:00:00Z</updated>
+    <summary>When sharing a VM, all HTTP ports were proxied to e-mail-identified share recipients instead of only the specified port.</summary>
+    <content type="xhtml">
+      <div xmlns="http://www.w3.org/1999/xhtml">
+        <p>Through February 21, 2026, when exe.dev users shared their VM using the &quot;share&quot;
+command, ports 3000-9999 were proxied, not just the specifically indicated
+port. Users who received a share link could access Shelley, which may not have
+been intended. Only users who were logged into exe.dev with their e-mail
+address, and with whom the VM was shared either via share link or explicitly
+via e-mail address, could access these ports.</p>
+<p>We have fixed the issue, and we have notified affected users. There is no
+evidence of malicious use.</p>
+
+      </div>
+    </content>
+    <author>
+      <name>exe.dev team</name>
+      <email>security@exe.dev</email>
+    </author>
+  </entry>
+  
+</feed>

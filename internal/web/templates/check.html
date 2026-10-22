@@ -16,6 +16,16 @@
 </section>
 {{end}}
 
+{{if .Notices}}
+<section class="card">
+  <h2>Notices</h2>
+  <ul class="notices">
+    {{range .Notices}}<li>{{if .New}}<span class="badge badge-warn">new</span> {{end}}{{if .Link}}<a href="{{.Link}}" rel="noopener noreferrer" target="_blank">{{.Title}}</a>{{else}}{{.Title}}{{end}}{{if not .Date.IsZero}} <span class="muted">{{.Date.Format "2006-01-02"}}</span>{{end}}</li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
 {{if .Flash}}<p class="status status-warn">{{.Flash}}</p>{{end}}
 
 {{$c := .Check}}
@@ -24,7 +34,7 @@
   <h2>Acknowledge</h2>
   {{if .CanAccept}}
   <form method="post" action="{{checkURL $c.Host $c.ID}}/accept" class="inline-form">
-    <p class="help">Accept the current {{.AcceptWhat}} as the new baseline. The check turns ok. Only do this once you know who made the change.</p>
+    <p class="help">{{if .AcceptHelp}}{{.AcceptHelp}}{{else}}Accept the current {{.AcceptWhat}} as the new baseline. The check turns ok. Only do this once you know who made the change.{{end}}</p>
     <button class="btn btn-primary" type="submit">Accept current {{.AcceptWhat}}</button>
   </form>
   {{end}}

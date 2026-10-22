@@ -448,6 +448,7 @@ var groups = []struct {
 	{"Disks and snapshots", []string{"disk.", "snapshot."}},
 	{"Licences", []string{"p4.licence"}},
 	{"Security", []string{"auth.", "sec."}},
+	{"Security notices", []string{"notice."}},
 	{"OpSec", []string{"opsec."}},
 	{"Monitor", []string{"serve."}},
 }
@@ -590,6 +591,8 @@ type checkData struct {
 	AckOptions  []ackOption
 	CanAccept   bool
 	AcceptWhat  string
+	AcceptHelp  string
+	Notices     []probe.NoticeItem // a notice check's items, newest first
 	Flash       string
 }
 
@@ -640,6 +643,18 @@ func (w *Web) check(rw http.ResponseWriter, r *http.Request) {
 	}
 	if b, ok := server.BaselineFor(c.ID); ok && c.State != eval.OK {
 		d.CanAccept, d.AcceptWhat = true, b.What
+	}
+	if strings.HasPrefix(c.ID, "notice.") {
+		var nd struct {
+			Items []probe.NoticeItem `json:"items"`
+		}
+		if json.Unmarshal([]byte(c.Data), &nd) == nil {
+			d.Notices = nd.Items
+		}
+	}
+	if _, ok := server.BaselineFor(c.ID); !ok && probe.NoticeAcceptable(c.ID) && c.State != eval.OK {
+		d.CanAccept, d.AcceptWhat = true, "notices"
+		d.AcceptHelp = "Mark every notice listed below as seen. The check turns ok until the vendor publishes a new one. Only do this once you have checked whether they affect us."
 	}
 	w.render(rw, r, "check", 200, page{Title: w.label(c.Host) + " · " + c.ID, Section: "home", Data: d})
 }

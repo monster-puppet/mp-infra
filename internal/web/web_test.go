@@ -569,3 +569,27 @@ func TestMeters(t *testing.T) {
 		}
 	}
 }
+
+func TestNoticeAccept(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	data := `{"items":[{"id":"https://exe.dev/security/emudhra-compromise","title":"Third-party: eMudhra CA cert compromise","link":"https://exe.dev/security/emudhra-compromise","date":"2026-10-20T00:00:00Z","new":true}],"new":1}`
+	e.srv.Store.PutCheck(ctx, store.Check{Host: "serve", ID: "notice.exe-dev", State: eval.Crit, Summary: "1 new", Data: data}, now)
+	page := e.get("/check/serve/notice.exe-dev").Body.String()
+	if !strings.Contains(page, "Accept current notices") || !strings.Contains(page, `href="https://exe.dev/security/emudhra-compromise"`) {
+		t.Fatalf("no accept button or notice link:\n%s", page)
+	}
+	rec := httptest.NewRecorder()
+	e.ui.ServeHTTP(rec, form("/check/serve/notice.exe-dev/accept", nil, map[string]string{"Sec-Fetch-Site": "same-origin"}))
+	if c, _ := e.srv.Store.Check(ctx, "serve", "notice.exe-dev"); c.State != eval.OK {
+		t.Errorf("after accept: %+v", c)
+	}
+	if seen, _ := e.srv.Store.Get(ctx, "notice.exe-dev.seen"); !strings.Contains(seen, "emudhra-compromise") {
+		t.Errorf("seen list %q", seen)
+	}
+	// The Jenkins match clears itself: no accept button.
+	e.srv.Store.PutCheck(ctx, store.Check{Host: "serve", ID: "notice.jenkins.installed", State: eval.Crit, Summary: "x", Data: `{}`}, now)
+	if strings.Contains(e.get("/check/serve/notice.jenkins.installed").Body.String(), "Accept current") {
+		t.Error("accept offered for notice.jenkins.installed")
+	}
+}

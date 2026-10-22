@@ -1,5 +1,6 @@
 // Package probe runs the server-side checks: reachability, certificates, DNS, the
-// public port scan, and the Tailscale, Jenkins, DigitalOcean and Notion APIs. All
+// public port scan, the Tailscale, Jenkins, DigitalOcean and Notion APIs, and the
+// vendors' security notices (notices.go). All
 // of them only read, except the monthly break-glass status build (see jenkins.go).
 package probe
 
@@ -45,6 +46,9 @@ type Prober struct {
 	tsToken        string
 	tsTokenExpiry  time.Time
 	jenkinsOffline map[string]time.Time
+	notices        map[string]noticeCache // by check id, see cachedNotices
+	ucWarnings     []ucWarning            // Jenkins update-centre warnings
+	ucAt           time.Time
 }
 
 // New returns a Prober. kv may be nil, which disables the break-glass trigger.
@@ -60,6 +64,7 @@ func New(cfg *config.Server, kv KV) *Prober {
 		},
 		now:            time.Now,
 		jenkinsOffline: map[string]time.Time{},
+		notices:        map[string]noticeCache{},
 	}
 }
 
@@ -68,6 +73,7 @@ func (p *Prober) Run(ctx context.Context) []Check {
 	probes := []func(context.Context) []Check{
 		p.tcpChecks, p.httpChecks, p.tlsChecks, p.dnsChecks, p.portChecks,
 		p.tailscaleChecks, p.jenkinsChecks, p.snapshotChecks, p.notionChecks,
+		p.noticeChecks,
 	}
 	var mu sync.Mutex
 	var out []Check

@@ -158,6 +158,16 @@ see deploy.md).
 | `ts.devices` | Tailscale API: devices not in the expected list, or not seen for 30 days |
 | `opsec.items` | Notion OpSec checklist (read-only Notion token), count of open items |
 
+### Security notices
+
+Public feeds, no credentials (config `notices`, off unless `enabled`). Feeds are fetched hourly, KEV and the Jenkins update centre every 6 h; between fetches the last result is reused. On a feed's first run, items older than 14 days count as seen.
+
+| id | Source | ok / warn / crit |
+|---|---|---|
+| `notice.<feed>` | RSS/Atom feed (`notices.feeds`, default exe.dev, Tailscale, Jenkins advisories, PHP 8.3 security releases, Let's Encrypt incidents, DigitalOcean trust-security). Optional `tag` and `title` filters | no unaccepted notices / feed unreachable, or new notices on a `warn` feed / new notices on a `crit` feed (exe.dev, Tailscale). **Accept** in the UI marks all current items seen |
+| `notice.kev` | CISA Known Exploited Vulnerabilities JSON, entries whose vendor or product contains a `kev_products` word | no new entries / catalogue unreachable / new matching entry (actively exploited). Accept as above |
+| `notice.jenkins.installed` | Jenkins update centre `warnings` matched (full-regex, like Jenkins) to the core (`X-Jenkins`) and installed plugins (`/pluginManager/api/json`, jenkins token) | no match / update centre or Jenkins unreachable / an installed component has a warning. Clears by itself after the update; no accept |
+
 ## 5. Web UI
 
 - Server-rendered `html/template`, one hand-written `static/app.js` at most. No npm, no

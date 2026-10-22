@@ -366,8 +366,12 @@ func diffItems(base, now []string) (added, removed []string) {
 	return added, removed
 }
 
-// AcceptBaseline accepts what host currently reports for a drift check.
+// AcceptBaseline accepts what host currently reports for a drift check, or the
+// current notices of a security-notice check.
 func (s *Server) AcceptBaseline(ctx context.Context, host, id, by string) error {
+	if probe.NoticeAcceptable(id) {
+		return s.acceptNotice(ctx, host, id, by)
+	}
 	b, ok := BaselineFor(id)
 	if !ok {
 		return fmt.Errorf("%s is not a drift check", id)
@@ -385,6 +389,28 @@ func (s *Server) AcceptBaseline(ctx context.Context, host, id, by string) error 
 		return err
 	}
 	c.State, c.Summary = eval.OK, b.What+" accepted by "+by
+	t, err := s.Store.PutCheck(ctx, *c, now)
+	if err != nil {
+		return err
+	}
+	if t != nil {
+		s.Alerter.Transitions(ctx, []store.Transition{*t})
+	}
+	return nil
+}
+
+// acceptNotice marks a notice check's current items as seen and turns it ok; the
+// next probe run keeps it ok until a new notice arrives.
+func (s *Server) acceptNotice(ctx context.Context, host, id, by string) error {
+	c, err := s.Store.Check(ctx, host, id)
+	if err != nil || c == nil {
+		return fmt.Errorf("no check %s/%s", host, id)
+	}
+	if err := probe.AcceptNotice(ctx, s.Store, id, []byte(c.Data)); err != nil {
+		return err
+	}
+	now := s.Now()
+	c.State, c.Summary = eval.OK, "notices accepted by "+by
 	t, err := s.Store.PutCheck(ctx, *c, now)
 	if err != nil {
 		return err
