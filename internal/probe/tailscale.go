@@ -22,6 +22,19 @@ type tsDevice struct {
 	KeyExpiryDisabled  bool      `json:"keyExpiryDisabled"`
 	ConnectedToControl bool      `json:"connectedToControl"`
 	Tags               []string  `json:"tags"`
+	OS                 string    `json:"os"`
+	Addresses          []string  `json:"addresses"`
+}
+
+// TSDevice is one tailnet device as listed in the data of ts.devices.
+type TSDevice struct {
+	Name      string    `json:"name"`
+	OS        string    `json:"os"`
+	Addr      string    `json:"addr"`
+	Connected bool      `json:"connected"`
+	LastSeen  time.Time `json:"last_seen"`
+	Tags      []string  `json:"tags,omitempty"`
+	Host      string    `json:"host,omitempty"` // the configured host this device is
 }
 
 func (p *Prober) tailscaleChecks(ctx context.Context) []Check {
@@ -116,12 +129,14 @@ func (p *Prober) evalTailscale(devices []tsDevice) []Check {
 	}
 	var out []Check
 	known := map[string]bool{}
+	hostOf := map[string]string{}
 	for _, h := range p.cfg.Hosts {
 		if h.NotOnTailnet {
 			continue
 		}
 		name := p.deviceName(h.Name)
 		known[name] = true
+		hostOf[name] = h.Name
 		d, ok := byName[name]
 		if !ok {
 			out = append(out,
@@ -162,8 +177,14 @@ func (p *Prober) evalTailscale(devices []tsDevice) []Check {
 		known[strings.ToLower(e)] = true
 	}
 	var unknown, unseen []string
+	list := make([]TSDevice, 0, len(devices))
 	for _, d := range devices {
 		n := strings.ToLower(d.Hostname)
+		td := TSDevice{Name: d.Hostname, OS: d.OS, Connected: d.ConnectedToControl, LastSeen: d.LastSeen, Tags: d.Tags, Host: hostOf[n]}
+		if len(d.Addresses) > 0 {
+			td.Addr = d.Addresses[0]
+		}
+		list = append(list, td)
 		if !known[n] {
 			unknown = append(unknown, d.Hostname)
 		}
@@ -175,7 +196,7 @@ func (p *Prober) evalTailscale(devices []tsDevice) []Check {
 	sort.Strings(unseen)
 	dev := Check{Host: config.ServeHost, ID: "ts.devices", State: eval.OK,
 		Summary: fmt.Sprintf("%d devices, all expected", len(devices)),
-		Data:    map[string]any{"count": len(devices), "unexpected": unknown, "unseen": unseen}}
+		Data:    map[string]any{"count": len(devices), "unexpected": unknown, "unseen": unseen, "devices": list}}
 	if len(unknown)+len(unseen) > 0 {
 		dev.State = eval.Warn
 		var parts []string

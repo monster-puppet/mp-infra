@@ -731,3 +731,72 @@ pre.data {
   color: var(--text);
   background: rgba(255, 255, 255, 0.06);
 }
+
+/* Tailnet devices */
+.devices {
+  list-style: none;
+  margin-top: 0.75rem;
+}
+
+.device {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "icon name"
+    "icon meta";
+  column-gap: 0.75rem;
+  align-items: center;
+  padding: 0.45rem 0;
+}
+
+.device + .device {
+  border-top: 1px solid var(--border);
+}
+
+.device .os-icon { grid-area: icon; }
+
+.device-name {
+  grid-area: name;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+.device-meta {
+  grid-area: meta;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.device-off {
+  opacity: 0.55;
+}
+
+.os-laptop, .os-phone, .os-device { color: var(--text); }
+
+.offline {
+  margin-top: 0.75rem;
+}
+
+.offline summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+@media (min-width: 760px) {
+  .tailnet .devices {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    column-gap: 2rem;
+  }
+
+  .tailnet .device + .device {
+    border-top: 0;
+  }
+}
+
+.page-title {
+  margin-bottom: 1.5rem;
+  overflow-wrap: anywhere;
+}

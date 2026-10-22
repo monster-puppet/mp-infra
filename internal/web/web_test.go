@@ -331,3 +331,22 @@ func TestEditHost(t *testing.T) {
 		t.Errorf("label = %q", got)
 	}
 }
+
+func TestTailnetDevices(t *testing.T) {
+	e := setup(t)
+	data := `{"count":4,"devices":[
+		{"name":"jenkins","os":"linux","addr":"100.64.0.2","connected":true,"host":"jenkins"},
+		{"name":"studio-mac","os":"macOS","addr":"100.64.0.5","connected":true,"tags":["tag:dev"]},
+		{"name":"<b>phone</b>","os":"iOS","connected":true},
+		{"name":"old-pc","os":"windows","connected":false,"last_seen":"2026-10-20T14:00:00Z"}]}`
+	e.srv.Store.PutCheck(context.Background(), store.Check{Host: config.ServeHost, ID: "ts.devices", State: eval.OK, Summary: "4 devices", Data: data}, now)
+	h := e.get("/").Body.String()
+	for _, want := range []string{"Tailnet", "2 other devices connected", "1 offline", "studio-mac", "100.64.0.5", "tag:dev", "os-laptop", "os-phone", "&lt;b&gt;phone", "old-pc", "last seen 2 d ago"} {
+		if !strings.Contains(h, want) {
+			t.Errorf("home lacks %q", want)
+		}
+	}
+	if strings.Contains(h, `<span class="device-name">jenkins</span>`) {
+		t.Error("configured host listed as another device")
+	}
+}

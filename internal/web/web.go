@@ -23,6 +23,7 @@ import (
 
 	"github.com/monster-puppet/mp-infra/internal/config"
 	"github.com/monster-puppet/mp-infra/internal/eval"
+	"github.com/monster-puppet/mp-infra/internal/probe"
 	"github.com/monster-puppet/mp-infra/internal/report"
 	"github.com/monster-puppet/mp-infra/internal/server"
 	"github.com/monster-puppet/mp-infra/internal/store"
@@ -309,8 +310,80 @@ type homeData struct {
 	Overall eval.State
 	Summary string
 	Hosts   []rowView
+	Tailnet *tailnetView
 	Groups  []rowView
 	Empty   bool
+}
+
+// tailnetView lists the tailnet devices that are not configured hosts.
+type tailnetView struct {
+	Online  []deviceView
+	Offline []deviceView
+	Age     string
+}
+
+type deviceView struct {
+	Name   string
+	OS     string // icon family
+	OSName string
+	Addr   string
+	Tags   string
+	Seen   string
+}
+
+// deviceFamily maps a Tailscale device OS to an icon family.
+func deviceFamily(os string) string {
+	switch strings.ToLower(os) {
+	case "windows":
+		return "windows"
+	case "linux":
+		return "linux"
+	case "macos":
+		return "laptop"
+	case "ios", "android":
+		return "phone"
+	}
+	return "device"
+}
+
+// deviceOSName capitalises the OS names Tailscale sends in lower case.
+func deviceOSName(os string) string {
+	switch os {
+	case "windows":
+		return "Windows"
+	case "linux":
+		return "Linux"
+	case "android":
+		return "Android"
+	}
+	return os
+}
+
+// tailnet builds the device list from the data of the ts.devices check.
+func tailnet(c checkView, now time.Time) *tailnetView {
+	var data struct {
+		Devices []probe.TSDevice `json:"devices"`
+	}
+	if json.Unmarshal([]byte(c.Data), &data) != nil || len(data.Devices) == 0 {
+		return nil
+	}
+	sort.Slice(data.Devices, func(i, j int) bool {
+		return strings.ToLower(data.Devices[i].Name) < strings.ToLower(data.Devices[j].Name)
+	})
+	t := &tailnetView{Age: c.Age}
+	for _, d := range data.Devices {
+		if d.Host != "" {
+			continue
+		}
+		v := deviceView{Name: d.Name, OS: deviceFamily(d.OS), OSName: deviceOSName(d.OS), Addr: d.Addr, Tags: strings.Join(d.Tags, " ")}
+		if d.Connected {
+			t.Online = append(t.Online, v)
+			continue
+		}
+		v.Seen = "last seen " + ago(now, d.LastSeen)
+		t.Offline = append(t.Offline, v)
+	}
+	return t
 }
 
 // groups are the cross-host rows on the home page, by check id prefix.
@@ -383,12 +456,15 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 	now := w.srv.Now()
 	byHost := map[string][]checkView{}
 	var all []checkView
+	d := homeData{Overall: eval.OK, Empty: len(checks) == 0}
 	for _, c := range checks {
 		v := w.view(c, now)
 		byHost[c.Host] = append(byHost[c.Host], v)
 		all = append(all, v)
+		if c.Host == config.ServeHost && c.ID == "ts.devices" {
+			d.Tailnet = tailnet(v, now)
+		}
 	}
-	d := homeData{Overall: eval.OK, Empty: len(checks) == 0}
 	for _, h := range w.hosts() {
 		row := newRow(h.DisplayName(), byHost[h.Name])
 		row.Host, row.OS, row.OSName = h.Name, config.OSFamily(h.OS), config.OSNames[h.OS]

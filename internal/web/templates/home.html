@@ -9,6 +9,22 @@
 {{range .Hosts}}{{template "row" .}}{{end}}
 </div>
 
+{{with .Tailnet}}
+<h2 class="section-title">Tailnet</h2>
+<article class="card tailnet">
+  <p class="row-note">{{len .Online}} other device{{if ne (len .Online) 1}}s{{end}} connected{{if .Offline}} · {{len .Offline}} offline{{end}} · updated {{.Age}}</p>
+  <ul class="devices">
+  {{range .Online}}{{template "device" .}}{{else}}<li class="empty">no other devices connected</li>{{end}}
+  </ul>
+  {{if .Offline}}
+  <details class="offline">
+    <summary>{{len .Offline}} offline</summary>
+    <ul class="devices">{{range .Offline}}{{template "device" .}}{{end}}</ul>
+  </details>
+  {{end}}
+</article>
+{{end}}
+
 {{if .Groups}}
 <h2 class="section-title">Across hosts</h2>
 <div class="grid">
@@ -16,6 +32,14 @@
 </div>
 {{end}}
 {{end}}{{end}}
+
+{{define "device"}}
+<li class="device{{if .Seen}} device-off{{end}}">
+  {{template "osicon" .}}
+  <span class="device-name">{{.Name}}</span>
+  <span class="device-meta">{{with .OSName}}{{.}}{{end}}{{with .Addr}} · <span class="mono">{{.}}</span>{{end}}{{with .Tags}} · {{.}}{{end}}{{with .Seen}} · {{.}}{{end}}</span>
+</li>
+{{end}}
 
 {{define "row"}}
 <article class="card row state-{{.State}}">

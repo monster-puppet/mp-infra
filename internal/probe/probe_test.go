@@ -178,7 +178,7 @@ func TestTailscale(t *testing.T) {
 		{"hostname": "WIN-AWS", "connectedToControl": false, "keyExpiryDisabled": false, "lastSeen": t0.Add(-20 * time.Minute), "expires": t0.Add(10 * 24 * time.Hour)},
 		{"hostname": "old-laptop", "connectedToControl": false, "lastSeen": t0.Add(-40 * 24 * time.Hour)},
 		{"hostname": "marcus-phone", "connectedToControl": true, "lastSeen": t0},
-		{"hostname": "stranger", "connectedToControl": true, "lastSeen": t0},
+		{"hostname": "stranger", "connectedToControl": true, "lastSeen": t0, "os": "macOS", "addresses": []string{"100.64.0.9", "fd7a::9"}},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -235,6 +235,22 @@ func TestTailscale(t *testing.T) {
 	d := find(t, cs, "ts.devices")
 	if !strings.Contains(d.Summary, "stranger") || !strings.Contains(d.Summary, "old-laptop") {
 		t.Errorf("devices: %s", d.Summary)
+	}
+	list := d.Data.(map[string]any)["devices"].([]TSDevice)
+	if len(list) != len(devices) {
+		t.Fatalf("device list: %+v", list)
+	}
+	for _, dv := range list {
+		switch dv.Name {
+		case "stranger":
+			if dv.OS != "macOS" || dv.Addr != "100.64.0.9" || !dv.Connected || dv.Host != "" {
+				t.Errorf("stranger: %+v", dv)
+			}
+		case "WIN-AWS":
+			if dv.Host != "jenkins-win" {
+				t.Errorf("WIN-AWS not tied to its host: %+v", dv)
+			}
+		}
 	}
 	p.tailscaleChecks(context.Background())
 	if tokenCalls != 1 {

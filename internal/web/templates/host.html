@@ -1,6 +1,6 @@
 {{define "content"}}{{with .Data}}
 <p class="crumbs"><a href="/">Status</a> / <a href="/history?host={{.Host.Name}}">{{.Host.DisplayName}}</a></p>
-<h1>{{.Host.DisplayName}}</h1>
+<h1 class="page-title">{{.Host.DisplayName}}</h1>
 {{if .Flash}}<p class="status status-warn">{{.Flash}}</p>{{end}}
 <section class="card">
   <h2>Display</h2>
