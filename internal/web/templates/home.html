@@ -15,18 +15,19 @@
       <title>Internet</title>
       <rect x="28" y="12" width="150" height="{{sub .H 24}}" rx="75"/>
       {{if .Failed}}
-      {{template "globe" (badge 103 (sub (half .H) 34))}}
-      <text x="103" y="{{add (half .H) 20}}" class="inet-failed failed-{{.FailedClass}}">{{.Failed}}</text>
-      <text x="103" y="{{add (half .H) 38}}" class="bubble-note">failed logins</text>
-      <text x="103" y="{{add (half .H) 53}}" class="bubble-note">last 24 h</text>
+      {{template "globe" (badge 103 (sub (half .H) 56))}}
+      <text x="103" y="{{sub (half .H) 8}}" class="bubble-name">Internet</text>
+      <text x="103" y="{{add (half .H) 30}}" class="inet-failed failed-{{.FailedClass}}">{{.Failed}}</text>
+      <text x="103" y="{{add (half .H) 48}}" class="bubble-note">failed logins</text>
+      <text x="103" y="{{add (half .H) 63}}" class="bubble-note">last 24 h</text>
       {{else}}
-      {{template "globe" (badge 103 (half .H))}}
+      {{template "globe" (badge 103 (sub (half .H) 16))}}
+      <text x="103" y="{{add (half .H) 28}}" class="bubble-name">Internet</text>
       {{end}}
     </g>
     <g class="bubble bubble-tailnet">
       <rect x="{{sub .W 178}}" y="12" width="150" height="{{sub .H 24}}" rx="75"/>
       <text x="{{sub .W 103}}" y="{{half .H}}" class="bubble-name">Tailnet</text>
-      {{with .TailnetNote}}<text x="{{sub $.Data.Map.W 103}}" y="{{add (half $.Data.Map.H) 22}}" class="bubble-note">{{.}}</text>{{end}}
     </g>
     {{range .Devices}}<g class="map-device"><title>{{.Title}}</title>{{template "deviceicon" .}}</g>{{end}}
     {{template "badges" .MoreDevices}}
@@ -56,17 +57,18 @@
       <title>Internet</title>
       <rect x="12" y="10" width="{{sub .NW 24}}" height="68" rx="34"/>
       {{if .Failed}}
-      {{template "globe" (badge (sub (half .NW) 64) 44)}}
-      <text x="{{add (half .NW) 18}}" y="43" class="inet-failed inet-failed-small failed-{{.FailedClass}}">{{.Failed}}</text>
-      <text x="{{add (half .NW) 18}}" y="60" class="bubble-note">failed logins / 24 h</text>
+      {{template "globe" (badge (sub (half .NW) 110) 44)}}
+      <text x="{{sub (half .NW) 32}}" y="50" class="bubble-name">Internet</text>
+      <text x="{{add (half .NW) 90}}" y="43" class="inet-failed inet-failed-small failed-{{.FailedClass}}">{{.Failed}}</text>
+      <text x="{{add (half .NW) 90}}" y="60" class="bubble-note">failed logins / 24 h</text>
       {{else}}
-      {{template "globe" (badge (half .NW) 44)}}
+      {{template "globe" (badge (sub (half .NW) 50) 44)}}
+      <text x="{{add (half .NW) 26}}" y="50" class="bubble-name">Internet</text>
       {{end}}
     </g>
     <g class="bubble bubble-tailnet">
       <rect x="12" y="{{sub .NH 78}}" width="{{sub .NW 24}}" height="68" rx="34"/>
-      <text x="{{half .NW}}" y="{{if .TailnetNote}}{{sub .NH 46}}{{else}}{{sub .NH 38}}{{end}}" class="bubble-name">Tailnet</text>
-      {{with .TailnetNote}}<text x="{{half $.Data.Map.NW}}" y="{{sub $.Data.Map.NH 26}}" class="bubble-note">{{.}}</text>{{end}}
+      <text x="{{half .NW}}" y="{{sub .NH 38}}" class="bubble-name">Tailnet</text>
     </g>
     {{range .Narrow}}{{template "maplink" .Internet}}{{template "maplink" .Tailnet}}{{end}}
     {{range .NarrowLinks}}{{template "hostlink" .}}{{end}}

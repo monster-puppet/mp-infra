@@ -96,16 +96,15 @@ type mapDevice struct {
 }
 
 type mapView struct {
-	Nodes        []mapNode
-	Links        []hostLink
-	Devices      []mapDevice
-	MoreDevices  []mapBadge // "+N" when they do not all fit
+	Nodes       []mapNode
+	Links       []hostLink
+	Devices     []mapDevice
+	MoreDevices []mapBadge // "+N" when they do not all fit
 	// Failed logins across all hosts in the last 24 h, shown in the internet bubble
 	// under its globe: "12,045", or "" when none. FailedClass colours it like the
 	// worst host's count (active during a brute force).
 	Failed      string
 	FailedClass string
-	TailnetNote  string
 	// Wide layout: networks left and right of a host column.
 	W, H float64
 	// Narrow layout (phones): networks above and below a row of hosts.
@@ -160,7 +159,7 @@ func (m *mapView) layout() {
 	m.layoutDevices()
 }
 
-// Devices sit in rows of three under the bubble's name and note.
+// Devices sit in rows of three under the bubble's name.
 const devCell, devCols = 30.0, 3
 
 // layoutDevices fills the tailnet bubble with as many devices as fit; the last
@@ -169,7 +168,7 @@ func (m *mapView) layoutDevices() {
 	if len(m.Devices) == 0 {
 		return
 	}
-	cx, top := m.W-mapPad-mapBubbleW/2, m.H/2+46
+	cx, top := m.W-mapPad-mapBubbleW/2, m.H/2+30
 	// Keep clear of the bubble's rounded bottom.
 	rows := int((m.H-44-top)/devCell) + 1
 	fit := max(0, rows*devCols)
@@ -436,7 +435,6 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 	}
 	m.Links = hostLinks(m.Nodes, links, all)
 	if tn != nil {
-		m.TailnetNote = fmt.Sprintf("+%d other device%s", len(tn.Online), plural(len(tn.Online)))
 		for _, d := range tn.Online {
 			shape := map[string]string{"laptop": "laptop", "phone": "phone"}[d.OS]
 			if shape == "" {
