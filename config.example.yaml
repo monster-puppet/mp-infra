@@ -1,0 +1,44 @@
+# Example server config. The real file is /etc/mp-infra/config.yaml and is never committed.
+# Secrets are referenced by env var name only (*_env keys).
+
+ui_addr: "TAILNET_IP:8098"      # UI, members only
+report_addr: "TAILNET_IP:8099"  # report API, all reporting hosts
+db: /var/lib/mp-infra/mpinfra.db
+stale_after: 15m
+
+hosts:
+  - name: monster-p4
+    public_ip: "PUBLIC_IP"
+    expected_public_ports: [22, 80, 443]
+  - name: jenkins
+    public_ip: "PUBLIC_IP"
+    expected_public_ports: [22, 80, 443, 50001]
+  - name: jenkins-win
+    public_ip: "PUBLIC_IP"
+    expected_public_ports: []
+
+tls:
+  - name: code-review
+    url: "https://CODE_REVIEW_HOST/"
+  - name: jenkins
+    url: "https://JENKINS_HOST/"
+
+tailscale:
+  client_id_env: MPINFRA_TS_CLIENT_ID
+  client_secret_env: MPINFRA_TS_CLIENT_SECRET
+
+jenkins:
+  url: "https://JENKINS_HOST/"
+  user: mpinfra
+  token_env: MPINFRA_JENKINS_TOKEN
+  agents: [windows]
+  breakglass_job: break-glass-windows-tailscale
+
+alerts:
+  slack_webhook_env: MPINFRA_SLACK_WEBHOOK
+  smtp_password_env: MPINFRA_SMTP_PASSWORD
+  deadman_url_env: MPINFRA_DEADMAN_URL
+  crit_reminder: 12h
+  digest_at: "08:00"
+
+report_tokens_env: MPINFRA_REPORT_TOKENS

@@ -1,0 +1,11 @@
+bin/
+dist/
+data/
+*.db
+*.db-wal
+*.db-shm
+*.tmp
+config.yaml
+agent.yaml
+.env
+env
