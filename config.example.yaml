@@ -118,6 +118,11 @@ alerts:
 
 report_tokens_env: MPINFRA_REPORT_TOKENS
 
+# Read-only MCP endpoint at /mcp on the UI port, for Claude Code and other agents
+# (docs/mcp.md). The env var holds "client=sha256hex,..." from `mpinfra token`.
+# Unset or empty: no /mcp.
+mcp_tokens_env: MPINFRA_MCP_TOKENS
+
 # Google sign-in on top of the tailnet (docs/deploy.md §8). Needs an https base_url,
 # e.g. ui_addr: "127.0.0.1:8098" behind `tailscale serve`, and
 # base_url: "https://MONITOR_HOST.TAILNET_NAME.ts.net". Redirect URI to register

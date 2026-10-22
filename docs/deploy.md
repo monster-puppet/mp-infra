@@ -141,6 +141,7 @@ reach only the report endpoint. Test that `jenkins-win` cannot open the UI port.
 | `MPINFRA_REPORT_TOKENS` | `host=sha256hash,...` | — |
 | `MPINFRA_GOOGLE_CLIENT_SECRET` | Google OAuth client secret (§8), only with `google_login` | — |
 | `MPINFRA_SESSION_KEY` | signs sign-in cookies; `mpinfra token`, first line | — |
+| `MPINFRA_MCP_TOKENS` | `client=sha256hash,...` for the read-only `/mcp` endpoint ([mcp.md](mcp.md)) | — |
 
 Create each one fresh for mp-infra. Never reuse an existing token, so any one of them
 can be revoked without breaking something else.
@@ -151,6 +152,7 @@ Off unless `google_login.client_id` is set. When on, every UI page needs a Googl
 account from `allowed_domain` (a Workspace account: Google's `hd` claim must match)
 or one listed in `allowed_emails`. It is a second gate; the tailnet ACL still applies.
 `/healthz` and `/api/status.json` stay open on the tailnet for the morning brief.
+`/mcp` skips sign-in too and requires its own bearer token instead ([mcp.md](mcp.md)).
 
 Google accepts an http redirect URI only for localhost, so the UI needs https on a
 real name. Use `tailscale serve` with the tailnet's ts.net certificate:

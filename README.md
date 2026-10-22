@@ -49,6 +49,8 @@ Step-by-step for getting hosts to report: [`docs/setup.md`](docs/setup.md).
 Deployment (systemd unit, Windows scheduled task, Tailscale ACL) is in
 [`docs/deploy.md`](docs/deploy.md).
 
+Read-only MCP endpoint for Claude Code and other agents: [`docs/mcp.md`](docs/mcp.md).
+
 ## Building with Claude Code in the cloud
 
 The repo is set up for Claude Code on the web (claude.ai/code). `CLAUDE.md` pulls in

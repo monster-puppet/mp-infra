@@ -119,6 +119,14 @@ func serve(args []string) error {
 		log.Printf("tailscaled socket not found; viewers are shown by address")
 	}
 	w := web.New(srv, who)
+	mcpTokens, err := cfg.MCPTokens()
+	if err != nil {
+		return err
+	}
+	if len(mcpTokens) > 0 {
+		w.EnableMCP(mcpTokens)
+		log.Printf("MCP endpoint on %s for %d client(s)", web.MCPPath, len(mcpTokens))
+	}
 	if cfg.GoogleLogin.Enabled() {
 		g, err := web.NewGoogleAuth(cfg)
 		if err != nil {
@@ -240,6 +248,7 @@ func tokenCmd(w io.Writer) error {
 	fmt.Fprintf(w, "token:  %s\nsha256: %s\n", tok, hex.EncodeToString(sum[:]))
 	fmt.Fprintln(w, strings.TrimSpace(`
 Put the token in the host's agent.yaml (token: ...) and add host=<sha256> to
-MPINFRA_REPORT_TOKENS on the server. Do not store the token anywhere else.`))
+MPINFRA_REPORT_TOKENS on the server. Do not store the token anywhere else.
+For an MCP client, give it the token and add client=<sha256> to MPINFRA_MCP_TOKENS.`))
 	return nil
 }

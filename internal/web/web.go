@@ -42,6 +42,8 @@ type Web struct {
 	google *GoogleAuth // nil: no sign-in, the tailnet ACL is the only gate
 	pages  map[string]*template.Template
 
+	mcpTokens config.Tokens // MCP clients; empty: no /mcp
+
 	mu   sync.RWMutex
 	meta map[string]store.HostMeta // labels and OS set in the UI, by host
 }
@@ -147,6 +149,9 @@ func (w *Web) UI() http.Handler {
 	mux.HandleFunc("GET /history", w.history)
 	mux.HandleFunc("GET /host/{host}", w.hostPage)
 	mux.HandleFunc("POST /host/{host}", w.sameOrigin(w.saveHost))
+	if len(w.mcpTokens) > 0 {
+		mux.HandleFunc(MCPPath, w.mcp)
+	}
 	if w.google == nil {
 		return w.logged(secure(mux))
 	}

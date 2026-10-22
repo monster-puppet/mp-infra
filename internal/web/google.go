@@ -99,9 +99,10 @@ func (a *GoogleAuth) allowed(email, hd string) bool {
 }
 
 // open paths need no sign-in: health checks, the status line other tools read,
-// static files for the sign-in page, and the sign-in flow itself.
+// the MCP endpoint (it checks its own bearer tokens), static files for the
+// sign-in page, and the sign-in flow itself.
 func open(path string) bool {
-	return path == "/healthz" || path == "/api/status.json" ||
+	return path == "/healthz" || path == "/api/status.json" || path == MCPPath ||
 		strings.HasPrefix(path, "/static/") || strings.HasPrefix(path, "/auth/")
 }
 

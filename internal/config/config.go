@@ -33,6 +33,9 @@ type Server struct {
 	StaleAfter      time.Duration `yaml:"stale_after"`
 	Hosts           []Host        `yaml:"hosts"`
 	ReportTokensEnv string        `yaml:"report_tokens_env"`
+	// MCPTokensEnv names the env var holding the MCP clients' token hashes. Unset or
+	// empty: no /mcp endpoint.
+	MCPTokensEnv string `yaml:"mcp_tokens_env"`
 
 	// BaseURL is the UI's address as viewers reach it, for links in alerts.
 	BaseURL       string        `yaml:"base_url"`
@@ -388,42 +391,63 @@ func (c *Server) HasHost(name string) bool {
 	return false
 }
 
-// Tokens maps host name to the SHA-256 of that host's report token.
+// Tokens maps a host (or MCP client) name to the SHA-256 of its token.
 type Tokens map[string][]byte
 
 // ReportTokens reads the per-host token hashes from the env var named by
 // report_tokens_env. Format: "host=sha256hex,host=sha256hex". Every host must be
 // configured. An unset variable yields no tokens, so every report is rejected.
 func (c *Server) ReportTokens() (Tokens, error) {
+	return parseTokens(c.ReportTokensEnv, "host", func(host string) error {
+		if !c.HasHost(host) {
+			return fmt.Errorf("%s: token for unknown host %q", c.ReportTokensEnv, host)
+		}
+		return nil
+	})
+}
+
+// MCPTokens reads the MCP clients' token hashes from the env var named by
+// mcp_tokens_env. Format: "client=sha256hex,client=sha256hex"; the client name only
+// labels the log lines. No tokens: the /mcp endpoint is off.
+func (c *Server) MCPTokens() (Tokens, error) {
+	return parseTokens(c.MCPTokensEnv, "client", func(name string) error {
+		if !HostName.MatchString(name) {
+			return fmt.Errorf("%s: client name %q must be lower case letters, digits and '-'", c.MCPTokensEnv, name)
+		}
+		return nil
+	})
+}
+
+func parseTokens(env, what string, check func(name string) error) (Tokens, error) {
 	t := Tokens{}
-	if c.ReportTokensEnv == "" {
+	if env == "" {
 		return t, nil
 	}
-	raw := strings.TrimSpace(os.Getenv(c.ReportTokensEnv))
+	raw := strings.TrimSpace(os.Getenv(env))
 	if raw == "" {
 		return t, nil
 	}
 	for _, pair := range strings.Split(raw, ",") {
-		host, hash, ok := strings.Cut(strings.TrimSpace(pair), "=")
+		name, hash, ok := strings.Cut(strings.TrimSpace(pair), "=")
 		if !ok {
-			return nil, fmt.Errorf("%s: entry without '=' (want host=sha256hex)", c.ReportTokensEnv)
+			return nil, fmt.Errorf("%s: entry without '=' (want %s=sha256hex)", env, what)
 		}
-		if !c.HasHost(host) {
-			return nil, fmt.Errorf("%s: token for unknown host %q", c.ReportTokensEnv, host)
+		if err := check(name); err != nil {
+			return nil, err
 		}
 		sum, err := hex.DecodeString(hash)
 		if err != nil || len(sum) != 32 {
-			return nil, fmt.Errorf("%s: token hash for %q is not 64 hex chars", c.ReportTokensEnv, host)
+			return nil, fmt.Errorf("%s: token hash for %q is not 64 hex chars", env, name)
 		}
-		if _, dup := t[host]; dup {
-			return nil, fmt.Errorf("%s: duplicate token for %q", c.ReportTokensEnv, host)
+		if _, dup := t[name]; dup {
+			return nil, fmt.Errorf("%s: duplicate token for %q", env, name)
 		}
-		t[host] = sum
+		t[name] = sum
 	}
 	return t, nil
 }
 
-// Lookup returns the host whose token hash equals sum. It compares against every
+// Lookup returns the name whose token hash equals sum. It compares against every
 // entry in constant time so the timing does not reveal which host matched.
 func (t Tokens) Lookup(sum []byte) (string, bool) {
 	found := ""

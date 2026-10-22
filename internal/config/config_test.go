@@ -106,6 +106,34 @@ func TestReportTokens(t *testing.T) {
 	}
 }
 
+func TestMCPTokens(t *testing.T) {
+	sum := sha256.Sum256([]byte("secret-a"))
+	hexA := hex.EncodeToString(sum[:])
+	c := &Server{Hosts: []Host{{Name: "a"}}, MCPTokensEnv: "MPINFRA_TEST_MCP"}
+	cases := []struct {
+		env string
+		ok  bool
+		n   int
+	}{
+		{"", true, 0},
+		{"ops-agent=" + hexA, true, 1},
+		{"ops-agent=" + hexA + ",laptop=" + hexA, true, 2},
+		{"Ops Agent=" + hexA, false, 0},
+		{"ops-agent=" + hexA + ",ops-agent=" + hexA, false, 0},
+		{"ops-agent=abc", false, 0},
+	}
+	for _, tc := range cases {
+		t.Setenv("MPINFRA_TEST_MCP", tc.env)
+		got, err := c.MCPTokens()
+		if (err == nil) != tc.ok || len(got) != tc.n {
+			t.Errorf("env %q: got %d tokens, err %v", tc.env, len(got), err)
+		}
+	}
+	if got, err := (&Server{}).MCPTokens(); err != nil || len(got) != 0 {
+		t.Errorf("no mcp_tokens_env: %d tokens, err %v", len(got), err)
+	}
+}
+
 func TestLoadAgent(t *testing.T) {
 	c, err := LoadAgent(write(t, "host: jenkins\nserver_url: http://100.64.0.1:8099\ntoken_env: MPINFRA_TEST_TOK\ntoken: inline\n"))
 	if err != nil {
