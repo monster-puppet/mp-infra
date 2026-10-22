@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"sort"
 	"strings"
@@ -24,6 +25,9 @@ type tsDevice struct {
 	Tags               []string  `json:"tags"`
 	OS                 string    `json:"os"`
 	Addresses          []string  `json:"addresses"`
+	ClientConnectivity struct {
+		Endpoints []string `json:"endpoints"` // "ip:port" the device was last reached on
+	} `json:"clientConnectivity"`
 }
 
 // TSDevice is one tailnet device as listed in the data of ts.devices.
@@ -35,6 +39,30 @@ type TSDevice struct {
 	LastSeen  time.Time `json:"last_seen"`
 	Tags      []string  `json:"tags,omitempty"`
 	Host      string    `json:"host,omitempty"` // the configured host this device is
+	// PublicIPs are the device's public endpoint addresses, its NAT's address for a
+	// laptop at home. A login from one of them is that device going around the VPN.
+	PublicIPs []string `json:"public_ips,omitempty"`
+}
+
+var tsRange = netip.MustParsePrefix("100.64.0.0/10")
+
+// publicIPs keeps the public addresses of "ip:port" endpoints, once each.
+func publicIPs(endpoints []string) []string {
+	var out []string
+	seen := map[netip.Addr]bool{}
+	for _, e := range endpoints {
+		ap, err := netip.ParseAddrPort(e)
+		if err != nil {
+			continue
+		}
+		a := ap.Addr().Unmap()
+		if !a.IsGlobalUnicast() || a.IsPrivate() || tsRange.Contains(a) || seen[a] {
+			continue
+		}
+		seen[a] = true
+		out = append(out, a.String())
+	}
+	return out
 }
 
 func (p *Prober) tailscaleChecks(ctx context.Context) []Check {
@@ -180,7 +208,8 @@ func (p *Prober) evalTailscale(devices []tsDevice) []Check {
 	list := make([]TSDevice, 0, len(devices))
 	for _, d := range devices {
 		n := strings.ToLower(d.Hostname)
-		td := TSDevice{Name: d.Hostname, OS: d.OS, Connected: d.ConnectedToControl, LastSeen: d.LastSeen, Tags: d.Tags, Host: hostOf[n]}
+		td := TSDevice{Name: d.Hostname, OS: d.OS, Connected: d.ConnectedToControl, LastSeen: d.LastSeen, Tags: d.Tags, Host: hostOf[n],
+			PublicIPs: publicIPs(d.ClientConnectivity.Endpoints)}
 		if len(d.Addresses) > 0 {
 			td.Addr = d.Addresses[0]
 		}

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/netip"
 	"sort"
 	"strings"
 	"sync"
@@ -110,8 +111,77 @@ func (s *Server) applyRules(ctx context.Context, host string, c *store.Check, no
 		return s.updatesRule(ctx, host, c, now)
 	case strings.HasPrefix(c.ID, "auth.failures."):
 		return s.bruteForceRule(ctx, host, c, now)
+	case strings.HasPrefix(c.ID, "auth.logins."):
+		return s.tailnetLoginsRule(ctx, c)
 	}
 	return nil
+}
+
+// tailnetLoginsRule takes logins whose address is the public address of a
+// personal tailnet device (from the last ts.devices probe) out of "outside", so
+// someone SSHing to a host's public address from home is not a break-in. Tagged
+// devices are servers and CI and do not count: a login from jenkins's public
+// address is still crit. The device lists only current endpoints, so a login
+// from the device's previous address hours ago stays crit.
+func (s *Server) tailnetLoginsRule(ctx context.Context, c *store.Check) error {
+	var d map[string]json.RawMessage
+	var outside []report.Login
+	var total int
+	var errs []string
+	if json.Unmarshal([]byte(c.Data), &d) != nil || json.Unmarshal(d["outside"], &outside) != nil || len(outside) == 0 {
+		return nil
+	}
+	json.Unmarshal(d["total"], &total)
+	json.Unmarshal(d["errors"], &errs)
+	devices, err := s.personalDeviceIPs(ctx)
+	if err != nil || len(devices) == 0 {
+		return err
+	}
+	still, fromDevices := []report.Login{}, []report.Login{}
+	for _, o := range outside {
+		a, err := netip.ParseAddr(strings.Trim(o.IP, "[]"))
+		if name, ok := devices[a.Unmap()]; err == nil && ok {
+			o.Device = name
+			fromDevices = append(fromDevices, o)
+		} else {
+			still = append(still, o)
+		}
+	}
+	if len(fromDevices) == 0 {
+		return nil
+	}
+	c.State, c.Summary = report.LoginsVerdict(total, still, fromDevices, len(errs))
+	c.Summary = report.Clip(c.Summary, report.MaxSummary)
+	d["outside"], d["from_devices"] = mustJSON(still), mustJSON(fromDevices)
+	c.Data = string(mustJSON(d))
+	return nil
+}
+
+// personalDeviceIPs maps the public addresses of untagged tailnet devices to
+// their names.
+func (s *Server) personalDeviceIPs(ctx context.Context) (map[netip.Addr]string, error) {
+	c, err := s.Store.Check(ctx, config.ServeHost, "ts.devices")
+	if err != nil || c == nil {
+		return nil, err
+	}
+	var data struct {
+		Devices []probe.TSDevice `json:"devices"`
+	}
+	if json.Unmarshal([]byte(c.Data), &data) != nil {
+		return nil, nil
+	}
+	out := map[netip.Addr]string{}
+	for _, dv := range data.Devices {
+		if len(dv.Tags) > 0 {
+			continue
+		}
+		for _, ip := range dv.PublicIPs {
+			if a, err := netip.ParseAddr(ip); err == nil {
+				out[a.Unmap()] = dv.Name
+			}
+		}
+	}
+	return out, nil
 }
 
 // bruteForceWindow is the longest gap between two reports that still counts as

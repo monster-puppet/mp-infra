@@ -177,7 +177,8 @@ func TestTailscale(t *testing.T) {
 		{"hostname": "jenkins", "connectedToControl": false, "keyExpiryDisabled": true, "lastSeen": t0.Add(-10 * time.Minute)},
 		{"hostname": "WIN-AWS", "connectedToControl": false, "keyExpiryDisabled": false, "lastSeen": t0.Add(-20 * time.Minute), "expires": t0.Add(10 * 24 * time.Hour)},
 		{"hostname": "old-laptop", "connectedToControl": false, "lastSeen": t0.Add(-40 * 24 * time.Hour)},
-		{"hostname": "marcus-phone", "connectedToControl": true, "lastSeen": t0},
+		{"hostname": "marcus-phone", "connectedToControl": true, "lastSeen": t0,
+			"clientConnectivity": map[string]any{"endpoints": []string{"203.0.113.7:41641", "192.168.1.20:41641", "[2001:db8::7]:41641", "203.0.113.7:1234", "100.64.0.3:1", "junk"}}},
 		{"hostname": "stranger", "connectedToControl": true, "lastSeen": t0, "os": "macOS", "addresses": []string{"100.64.0.9", "fd7a::9"}},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -245,6 +246,10 @@ func TestTailscale(t *testing.T) {
 		case "stranger":
 			if dv.OS != "macOS" || dv.Addr != "100.64.0.9" || !dv.Connected || dv.Host != "" {
 				t.Errorf("stranger: %+v", dv)
+			}
+		case "marcus-phone":
+			if got := strings.Join(dv.PublicIPs, " "); got != "203.0.113.7 2001:db8::7" {
+				t.Errorf("marcus-phone public IPs: %q", got)
 			}
 		case "WIN-AWS":
 			if dv.Host != "jenkins-win" {

@@ -15,6 +15,7 @@ import (
 	"github.com/monster-puppet/mp-infra/internal/alert"
 	"github.com/monster-puppet/mp-infra/internal/config"
 	"github.com/monster-puppet/mp-infra/internal/eval"
+	"github.com/monster-puppet/mp-infra/internal/probe"
 	"github.com/monster-puppet/mp-infra/internal/report"
 	"github.com/monster-puppet/mp-infra/internal/store"
 )
@@ -251,5 +252,45 @@ func TestBruteForceActive(t *testing.T) {
 	send(fail(900, 400)) // a big jump after a long gap is not "now"
 	if c := get(); c.State != eval.OK {
 		t.Errorf("after gap: %+v", c)
+	}
+}
+
+func TestTailnetLogins(t *testing.T) {
+	s, _, _ := setup(t, config.Host{Name: "a"})
+	ctx := context.Background()
+	devs := []probe.TSDevice{
+		{Name: "marcus-laptop", PublicIPs: []string{"203.0.113.7"}},
+		{Name: "jenkins", Tags: []string{"tag:ci-untrusted"}, PublicIPs: []string{"198.51.100.9"}},
+	}
+	if _, err := s.Store.PutCheck(ctx, store.Check{Host: config.ServeHost, ID: "ts.devices", State: eval.OK,
+		Data: string(mustJSON(map[string]any{"devices": devs}))}, t0); err != nil {
+		t.Fatal(err)
+	}
+	logins := func(ips ...string) report.Check {
+		var out []report.Login
+		for _, ip := range ips {
+			out = append(out, report.Login{Source: "ssh", User: "root", IP: ip, Count: 1})
+		}
+		st, sum := report.LoginsVerdict(len(ips)+2, out, nil, 0)
+		d, _ := json.Marshal(map[string]any{"total": len(ips) + 2, "outside": out, "logins": out, "errors": []string{}})
+		return report.Check{ID: "auth.logins.a", State: st, Summary: sum, Data: d}
+	}
+	for i, tc := range []struct {
+		ips   []string
+		state eval.State
+		want  string
+	}{
+		{[]string{"203.0.113.7"}, eval.OK, "3 logins in 24 h; root from 203.0.113.7, the public address of tailnet device marcus-laptop"},
+		{[]string{"::ffff:203.0.113.7", "198.51.100.9"}, eval.Crit, "login from outside the tailnet: root from 198.51.100.9 (ssh)"},
+		{[]string{"192.0.2.1"}, eval.Crit, "login from outside the tailnet: root from 192.0.2.1 (ssh)"},
+	} {
+		s.lastIn = map[string]time.Time{}
+		if err := s.Ingest(ctx, "a", []byte(`{}`), payload("a", logins(tc.ips...))); err != nil {
+			t.Fatal(err)
+		}
+		c, _ := s.Store.Check(ctx, "a", "auth.logins.a")
+		if c.State != tc.state || c.Summary != tc.want {
+			t.Errorf("%d: %s %q", i, c.State, c.Summary)
+		}
 	}
 }

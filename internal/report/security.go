@@ -23,11 +23,15 @@ import (
 
 // --- auth.logins.<host> ---
 
-type login struct {
+// Login is one user and address in the data of auth.logins.<host>.
+type Login struct {
 	Source string `json:"source"`
 	User   string `json:"user,omitempty"`
 	IP     string `json:"ip"`
 	Count  int    `json:"count"`
+	// Device is set by the server when IP is the public address of a personal
+	// tailnet device (see server.tailnetLoginsRule).
+	Device string `json:"device,omitempty"`
 }
 
 const maxLogins = 50
@@ -57,17 +61,17 @@ func evalLogins(id string, l *config.Logins, outs []string, errs []error) Check 
 			counts[k]++
 		}
 	}
-	var all, outside []login
+	var all, outside []Login
 	total := 0
 	for k, n := range counts {
-		lg := login{Source: k.src, User: k.user, IP: k.ip, Count: n}
+		lg := Login{Source: k.src, User: k.user, IP: k.ip, Count: n}
 		total += n
 		all = append(all, lg)
 		if !allowedIP(k.ip, l.Nets) {
 			outside = append(outside, lg)
 		}
 	}
-	byCount := func(ls []login) {
+	byCount := func(ls []Login) {
 		sort.Slice(ls, func(i, j int) bool {
 			if ls[i].Count != ls[j].Count {
 				return ls[i].Count > ls[j].Count
@@ -83,35 +87,51 @@ func evalLogins(id string, l *config.Logins, outs []string, errs []error) Check 
 	if len(outside) > maxLogins {
 		outside = outside[:maxLogins]
 	}
-	c := Check{ID: id, State: eval.OK}
-	switch {
-	case len(outside) > 0:
-		c.State = eval.Crit
-		o := outside[0]
-		c.Summary = fmt.Sprintf("login from outside the tailnet: %s from %s (%s)", orUnknown(o.User), o.IP, o.Source)
-		if len(outside) > 1 {
-			c.Summary += fmt.Sprintf(" and %d more", len(outside)-1)
-		}
-	case total == 0:
-		c.Summary = "no logins in 24 h"
-	default:
-		c.Summary = fmt.Sprintf("%d logins in 24 h, all from the tailnet or allowed networks", total)
-	}
-	if len(failed) > 0 {
-		c.State = eval.Worst(c.State, eval.Warn)
-		c.Summary += fmt.Sprintf("; %d source(s) failed", len(failed))
-	}
+	c := Check{ID: id}
+	c.State, c.Summary = LoginsVerdict(total, outside, nil, len(failed))
 	if outside == nil {
-		outside = []login{}
+		outside = []Login{}
 	}
 	if all == nil {
-		all = []login{}
+		all = []Login{}
 	}
 	if failed == nil {
 		failed = []string{}
 	}
 	c.Data = mustJSON(map[string]any{"total": total, "outside": outside, "logins": all, "errors": failed})
 	return c
+}
+
+// LoginsVerdict is the state and summary of auth.logins.<host>: crit when a
+// login came from outside the allowed networks, warn when a source failed.
+// fromDevices are logins the server matched to a personal tailnet device's
+// public address; they are named but do not raise the state.
+func LoginsVerdict(total int, outside, fromDevices []Login, failed int) (eval.State, string) {
+	state, summary := eval.OK, ""
+	switch {
+	case len(outside) > 0:
+		state = eval.Crit
+		o := outside[0]
+		summary = fmt.Sprintf("login from outside the tailnet: %s from %s (%s)", orUnknown(o.User), o.IP, o.Source)
+		if len(outside) > 1 {
+			summary += fmt.Sprintf(" and %d more", len(outside)-1)
+		}
+	case len(fromDevices) > 0:
+		o := fromDevices[0]
+		summary = fmt.Sprintf("%d logins in 24 h; %s from %s, the public address of tailnet device %s", total, orUnknown(o.User), o.IP, o.Device)
+		if len(fromDevices) > 1 {
+			summary += fmt.Sprintf(" and %d more", len(fromDevices)-1)
+		}
+	case total == 0:
+		summary = "no logins in 24 h"
+	default:
+		summary = fmt.Sprintf("%d logins in 24 h, all from the tailnet or allowed networks", total)
+	}
+	if failed > 0 {
+		state = eval.Worst(state, eval.Warn)
+		summary += fmt.Sprintf("; %d source(s) failed", failed)
+	}
+	return state, summary
 }
 
 func orUnknown(s string) string {
