@@ -490,3 +490,82 @@ func TestNetMapFailed4h(t *testing.T) {
 		t.Errorf("one untimed: %q %q", m.Failed, m.Failed4h)
 	}
 }
+
+func TestMetersAndChart(t *testing.T) {
+	e := setup(t)
+	disk := func(pct float64) string {
+		return fmt.Sprintf(`{"host":"jenkins","agent_version":"1","collected_at":%q,"checks":[{"id":"disk.jenkins.root","state":"ok","summary":"/ %.0f%% used","data":{"mount":"/","total_bytes":1000,"free_bytes":%d,"used_pct":%v}}]}`,
+			e.clock.Format(time.RFC3339), pct, int(1000-pct*10), pct)
+	}
+	start := *e.clock
+	*e.clock = start.Add(-13 * 24 * time.Hour)
+	for i := 0; i < 40; i++ {
+		if i == 20 {
+			*e.clock = e.clock.Add(3 * 24 * time.Hour) // agent down: a gap in the line
+		}
+		if rec := e.post("tok-jenkins", disk(50+float64(i)/2)); rec.Code != http.StatusNoContent {
+			t.Fatalf("post: %d %s", rec.Code, rec.Body)
+		}
+		*e.clock = e.clock.Add(6 * time.Hour)
+	}
+	e.post("tok-jenkins", disk(72)) // now
+
+	h := e.get("/").Body.String()
+	if !strings.Contains(h, `class="meter-fill fill-ok" style="width: 72.0%"`) || !strings.Contains(h, ">72%<") {
+		t.Errorf("home lacks the disk meter")
+	}
+
+	p := e.get("/check/jenkins/disk.jenkins.root").Body.String()
+	for _, want := range []string{`class="chart"`, "Disk used: now 72%, 50% to 72%", "<title>", "100%"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("check page lacks %q", want)
+		}
+	}
+	if n := strings.Count(p, `class="chart-hit"`); n != 41 {
+		t.Errorf("%d chart points, want 41", n)
+	}
+	if line := between(p, `class="chart-area"/>`, `" class="chart-line"`); strings.Count(line, "M") != 2 {
+		t.Errorf("line not broken at the gap: %s", line)
+	}
+
+	// Probe results have no history: no chart, but the meter.
+	data := `{"days_left":10,"not_after":"2026-11-01T00:00:00Z"}`
+	e.srv.Store.PutCheck(context.Background(), store.Check{Host: config.ServeHost, ID: "tls.site", State: eval.OK, Summary: "x", Data: data}, now)
+	p = e.get("/check/serve/tls.site").Body.String()
+	if strings.Contains(p, `class="chart"`) || !strings.Contains(p, ">10 d<") {
+		t.Errorf("tls check page: chart or no meter")
+	}
+}
+
+func between(s, a, b string) string {
+	_, s, _ = strings.Cut(s, a)
+	s, _, _ = strings.Cut(s, b)
+	return s
+}
+
+func TestMeters(t *testing.T) {
+	th := config.Thresholds{SnapshotCritDays: 60}
+	cases := []struct {
+		id, data string
+		want     []string // name value pct
+	}{
+		{"disk.x.root", `{"used_pct":91.4,"total_bytes":100,"free_bytes":9}`, []string{" 91% 91.4"}},
+		{"disk.x.root", `{"used_pct":120}`, []string{" 120% 100.0"}},
+		{"p4.licence", `{"user_count":5,"user_limit":5,"client_count":40}`, []string{"users 5/5 100.0"}},
+		{"tls.a", `{"days_left":45}`, []string{" 45 d 50.0"}},
+		{"ts.key_expiry.h", `{"key_expiry_disabled":true,"expires":"0001-01-01T00:00:00Z"}`, nil},
+		{"ts.key_expiry.h", `{"key_expiry_disabled":false,"expires":"2026-12-21T14:00:00Z"}`, []string{" 60 d 33.3"}},
+		{"snapshot.age.d", `{"age_days":30}`, []string{" 30 d 50.0"}},
+		{"host.uptime", `{"seconds":5}`, nil},
+		{"disk.x.root", `not json`, nil},
+	}
+	for _, c := range cases {
+		var got []string
+		for _, m := range meters(checkView{Check: store.Check{ID: c.id, Data: c.data}}, th, now) {
+			got = append(got, fmt.Sprintf("%s %s %.1f", m.Name, m.Value, m.Pct))
+		}
+		if strings.Join(got, "|") != strings.Join(c.want, "|") {
+			t.Errorf("%s %s: %q, want %q", c.id, c.data, got, c.want)
+		}
+	}
+}

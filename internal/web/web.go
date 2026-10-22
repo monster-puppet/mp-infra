@@ -317,6 +317,7 @@ type checkView struct {
 	Effective eval.State // the state that counts: ok while acknowledged
 	Acked     bool
 	Age       string
+	Meters    []meter
 }
 
 type rowView struct {
@@ -460,6 +461,7 @@ func (w *Web) view(c store.Check, now time.Time) checkView {
 	if v.Acked {
 		v.Effective = eval.OK
 	}
+	v.Meters = meters(v, w.srv.Cfg.Thresholds, now)
 	return v
 }
 
@@ -582,6 +584,7 @@ type ackOption struct {
 
 type checkData struct {
 	Check       checkView
+	Chart       *chartView
 	DataPretty  string
 	Transitions []store.Transition
 	AckOptions  []ackOption
@@ -620,6 +623,10 @@ func (w *Web) check(rw http.ResponseWriter, r *http.Request) {
 	}
 	now := w.srv.Now()
 	d := checkData{Check: w.view(*c, now), Transitions: ts, Flash: r.URL.Query().Get("msg")}
+	if d.Chart, err = w.checkChart(ctx, host, id, now); err != nil {
+		w.fail(rw, r, 500, err.Error())
+		return
+	}
 	var pretty any
 	if json.Unmarshal([]byte(c.Data), &pretty) == nil {
 		b, _ := json.MarshalIndent(pretty, "", "  ")

@@ -60,3 +60,5 @@
 <p class="empty">No transitions yet.</p>
 {{end}}
 {{end}}
+
+{{define "meters"}}{{if .Meters}}{{$s := .Effective}}<span class="meters">{{range .Meters}}<span class="meter" title="{{.Title}}">{{with .Name}}<span class="meter-name">{{.}}</span>{{end}}<span class="meter-track"><span class="meter-fill fill-{{$s}}" style="width: {{printf "%.1f" .Pct}}%"></span></span><span class="meter-value">{{.Value}}</span></span>{{end}}</span>{{end}}{{end}}

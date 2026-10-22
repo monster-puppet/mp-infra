@@ -165,7 +165,11 @@ see deploy.md).
 - Dark theme in Monster Puppet colours (red accent). Works at phone width.
 - **Home:** one row per host with its worst state, then the cross-host groups (Tailscale,
   ports, certs, licences). Red and stale sort to the top. Every check shows its age.
-- **Check detail:** current data, the last 30 transitions, an "acknowledge until …" button
+- **Meters:** checks with a number on a natural scale show a bar under the summary:
+  disk used, licences used (`p4.licence`), days left on a certificate (`tls.*`, full at
+  90) or node key (`ts.key_expiry.*`, full at 180), snapshot age against its crit days.
+- **Check detail:** current data, a 30-day chart from the stored reports for disk
+  used, failed logins and licensed users (one point per 6 h), the last 30 transitions, an "acknowledge until …" button
   for `warn` states (e.g. an accepted firewall change). `crit` cannot be acknowledged
   for more than 24 h.
 - **History:** the transitions table, filterable by host.

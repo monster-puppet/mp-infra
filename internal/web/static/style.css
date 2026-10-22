@@ -481,6 +481,51 @@ form.nav-user {
   font-size: 0.75rem;
 }
 
+/* Meters: a thin bar per number with a natural scale, under the summary. The
+   fill takes the check's colour, the value beside it the text colour. */
+.meters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 1rem;
+  margin-top: 0.25rem;
+}
+
+.meter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 9rem;
+  max-width: 18rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.meter-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(250, 239, 195, 0.1);
+  overflow: hidden;
+}
+
+.meter-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 3px;
+  background: var(--text-muted);
+}
+
+.fill-ok { background: var(--ok); }
+.fill-warn { background: var(--warn); }
+.fill-crit { background: var(--crit); }
+.fill-stale { background: var(--stale); }
+
+.meter-value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .check-age {
   grid-area: age;
   font-size: 0.75rem;
@@ -1151,3 +1196,56 @@ pre.data {
 
 .lg-chip-bad { background: var(--crit); border-color: var(--crit); color: var(--on-primary); }
 .lg-chip-closed { border-style: dashed; border-color: var(--warn); color: var(--warn); text-decoration: line-through; }
+
+/* History chart on a check page: one series, so no legend; the title names it. */
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 0.5rem;
+}
+
+.chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart-label {
+  fill: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart-area {
+  fill: var(--accent);
+  opacity: 0.08;
+}
+
+.chart-dot {
+  fill: var(--accent);
+  stroke: var(--card-bg);
+  stroke-width: 2;
+}
+
+.chart-hit rect {
+  fill: transparent;
+}
+
+.chart-hit circle {
+  fill: var(--accent);
+  stroke: var(--card-bg);
+  stroke-width: 2;
+  opacity: 0;
+}
+
+.chart-hit:hover circle {
+  opacity: 1;
+}

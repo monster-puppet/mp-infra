@@ -142,7 +142,7 @@
       <a href="{{checkURL .Host .ID}}">
         <span class="dot dot-{{.State}}" title="{{.State}}"></span>
         <span class="check-id" title="{{.ID}}">{{shortID .Host .ID}}{{if eq .Host "serve"}}{{else if ne .Host $.Host}} <small>{{label .Host}}</small>{{end}}</span>
-        <span class="check-sum">{{.Summary}}</span>
+        <span class="check-sum">{{.Summary}}{{template "meters" .}}</span>
         <span class="check-age">{{if .Acked}}acknowledged · {{end}}{{.Age}}</span>
       </a>
     </li>

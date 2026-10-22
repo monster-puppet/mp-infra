@@ -308,6 +308,36 @@ func (s *Store) LastReports(ctx context.Context) (map[string]time.Time, error) {
 	return out, rows.Err()
 }
 
+// ReportSample is a stored report body and when it was received.
+type ReportSample struct {
+	At   time.Time
+	Body string
+}
+
+// SampleReports returns the newest report of host in each step-long slot since
+// since, oldest first, for charts over many days without reading every report.
+func (s *Store) SampleReports(ctx context.Context, host string, since time.Time, step time.Duration) ([]ReportSample, error) {
+	sec := max(int64(step.Seconds()), 1)
+	rows, err := s.db.QueryContext(ctx, `SELECT received_at, body FROM reports WHERE id IN (
+		SELECT MAX(id) FROM reports WHERE host = ? AND received_at >= ? GROUP BY received_at / ?)
+		ORDER BY received_at`, host, since.Unix(), sec)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ReportSample
+	for rows.Next() {
+		var t int64
+		var r ReportSample
+		if err := rows.Scan(&t, &r.Body); err != nil {
+			return nil, err
+		}
+		r.At = time.Unix(t, 0).UTC()
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // Checks returns all current checks ordered by host and id.
 func (s *Store) Checks(ctx context.Context) ([]Check, error) {
 	return s.queryChecks(ctx, checkSelect+` ORDER BY c.host, c.id`)
