@@ -66,3 +66,28 @@ func TestReportEndpointAuth(t *testing.T) {
 		t.Fatalf("endpoint check not stored: %+v", c)
 	}
 }
+
+func TestWhoami(t *testing.T) {
+	e := setup(t)
+	e.srv.Cfg.Hosts = append(e.srv.Cfg.Hosts, config.Host{Name: "rchau-pc", Endpoint: true})
+	d, _ := json.Marshal(map[string]any{"devices": []probe.TSDevice{{Name: "pet_computer", Addr: "100.64.0.11", Host: "rchau-pc"}}})
+	if _, err := e.srv.Store.PutCheck(context.Background(), store.Check{Host: config.ServeHost, ID: "ts.devices",
+		State: eval.OK, Data: string(d)}, now); err != nil {
+		t.Fatal(err)
+	}
+	get := func(from string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, WhoamiPath, nil)
+		req.RemoteAddr = from
+		rec := httptest.NewRecorder()
+		e.reports.ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := get("100.64.0.11:1"); rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"host":"rchau-pc"}` {
+		t.Errorf("enrolled: %d %s", rec.Code, rec.Body.String())
+	}
+	for _, from := range []string{"100.64.0.99:1", "203.0.113.1:1"} {
+		if rec := get(from); rec.Code != 404 {
+			t.Errorf("%s: %d", from, rec.Code)
+		}
+	}
+}

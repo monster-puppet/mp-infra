@@ -86,7 +86,9 @@ server stores the payload as received and adds its own probe checks next to it.
   report API accepts a token-less report only from a tailnet address that the last
   `ts.devices` probe maps to exactly one device of that endpoint host (a second device
   renamed to the same hostname makes both refused), only for that host, and only
-  `endpoint.*` and `os.security_updates.*` checks. The client sends facts with state ok;
+  `endpoint.*` and `os.security_updates.*` checks. The device is matched by its Tailscale name or
+  hostname; the launcher asks `GET /api/whoami` (report port) which host it is, and a
+  device that is not enrolled gets 404 and sends nothing. The client sends facts with state ok;
   the server decides the state (§4 Endpoints).
 - **`jenkins-win` is untrusted** (`tag:ci-untrusted`). Its reports may be lies. Its
   critical checks (on the tailnet, agent online) must therefore also be confirmed by

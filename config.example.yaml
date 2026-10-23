@@ -38,8 +38,8 @@ hosts:
   #   not_on_tailnet: true
   # A workstation that reports through the MP Launcher: no token (the report API
   # knows it by its tailnet address), stale only after endpoint_stale_after, no
-  # ts.online / ts.key_expiry. The tailnet device is matched by hostname, or map it
-  # under tailscale.devices.
+  # ts.online / ts.key_expiry. The device is matched by its Tailscale name
+  # (alundahl-pc) or its hostname; the launcher asks GET /api/whoami which it is.
   # - name: tacco-pc
   #   label: "Marcus's PC"
   #   os: windows-client

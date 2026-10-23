@@ -167,7 +167,28 @@ func (w *Web) UI() http.Handler {
 func (w *Web) Reports() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST "+report.Path, w.report)
+	mux.HandleFunc("GET "+WhoamiPath, w.whoami)
 	return w.logged(mux)
+}
+
+// WhoamiPath tells an endpoint (the MP Launcher) which host it reports as. Its
+// Tailscale name and its computer name often differ, and only the server knows
+// which one the config uses.
+const WhoamiPath = "/api/whoami"
+
+func (w *Web) whoami(rw http.ResponseWriter, r *http.Request) {
+	ap, err := netip.ParseAddrPort(r.RemoteAddr)
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	host, ok := w.srv.EndpointHost(r.Context(), ap.Addr())
+	if !ok {
+		http.NotFound(rw, r) // not an enrolled endpoint: nothing to report
+		return
+	}
+	rw.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(rw).Encode(map[string]string{"host": host})
 }
 
 func cacheFor(d time.Duration, h http.Handler) http.Handler {

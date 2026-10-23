@@ -159,27 +159,41 @@ func (p *Prober) evalTailscale(devices []tsDevice) []Check {
 	now := p.now()
 	th := p.cfg.Thresholds
 	byName := map[string]tsDevice{}
+	byMachine := map[string]tsDevice{}
 	for _, d := range devices {
 		n := strings.ToLower(d.Hostname)
 		if old, ok := byName[n]; !ok || d.LastSeen.After(old.LastSeen) || d.ConnectedToControl {
 			byName[n] = d
 		}
+		if m := strings.ToLower(machineName(d.Name)); m != "" {
+			byMachine[m] = d // Tailscale names are unique in a tailnet
+		}
 	}
 	var out []Check
 	known := map[string]bool{}
 	hostOf := map[string]string{}
+	// endpointOf maps a device's full Tailscale name to the endpoint host it is.
+	endpointOf := map[string]string{}
 	for _, h := range p.cfg.Hosts {
 		if h.NotOnTailnet {
 			continue
 		}
 		name := p.deviceName(h.Name)
-		known[name] = true
-		hostOf[name] = h.Name
 		if h.Endpoint {
-			// Workstations sleep and should keep key expiry on: being offline or
-			// expiring is normal for them. They still count as known devices.
+			// A workstation is found by its Tailscale name (alundahl-pc) or its
+			// hostname. It sleeps and should keep key expiry on, so it gets no
+			// ts.online or ts.key_expiry check; it still counts as known.
+			d, ok := byMachine[name]
+			if !ok {
+				d, ok = byName[name]
+			}
+			if ok {
+				endpointOf[d.Name] = h.Name
+			}
 			continue
 		}
+		known[name] = true
+		hostOf[name] = h.Name
 		d, ok := byName[name]
 		if !ok {
 			out = append(out,
@@ -228,14 +242,19 @@ func (p *Prober) evalTailscale(devices []tsDevice) []Check {
 		if m != "" {
 			label = m
 		}
-		td := TSDevice{Name: d.Hostname, Machine: m, OS: d.OS, Connected: d.ConnectedToControl, LastSeen: d.LastSeen, Tags: d.Tags, Host: hostOf[n],
+		host := hostOf[n]
+		ep, isEndpoint := endpointOf[d.Name]
+		if isEndpoint {
+			host = ep
+		}
+		td := TSDevice{Name: d.Hostname, Machine: m, OS: d.OS, Connected: d.ConnectedToControl, LastSeen: d.LastSeen, Tags: d.Tags, Host: host,
 			PublicIPs: publicIPs(d.ClientConnectivity.Endpoints)}
 		if len(d.Addresses) > 0 {
 			td.Addr = d.Addresses[0]
 		}
 		list = append(list, td)
 		// An expected device may be listed by its hostname or its Tailscale name.
-		if !known[n] && !expected[n] && !expected[strings.ToLower(m)] {
+		if !known[n] && !isEndpoint && !expected[n] && !expected[strings.ToLower(m)] {
 			unknown = append(unknown, label)
 		}
 		if !d.ConnectedToControl && days(now.Sub(d.LastSeen)) > th.TSDeviceUnseenDays {
