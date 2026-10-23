@@ -113,7 +113,8 @@ deploy_unix() { # target bin cfg
   # Last line only: a login profile may print first (p4-main's p4 login does).
   [ "$(ssh "$target" 'id -u' | tr -d '\r' | tail -n 1)" = 0 ] && sudo= || tty=-t
   ssh "$target" 'mkdir -p -m 700 .mpinfra-deploy && cat > .mpinfra-deploy/step.sh' <<<"$STEP_SH"
-  scp -q "$LINUX_BIN" "$target:.mpinfra-deploy/mpinfra.new"
+  # Through ssh, not scp: DSM has no sftp subsystem, which scp needs by default.
+  ssh "$target" 'cat > .mpinfra-deploy/mpinfra.new' < "$LINUX_BIN"
   local rc=0
   ssh $tty "$target" "$sudo sh \"\$HOME/.mpinfra-deploy/step.sh\" $LINUX_SUM '$bin' '$cfg'" || rc=$?
   ssh "$target" 'rm -f .mpinfra-deploy/step.sh .mpinfra-deploy/mpinfra.new; rmdir .mpinfra-deploy' 2>/dev/null || true
