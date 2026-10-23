@@ -174,7 +174,8 @@ Public feeds, no credentials (config `notices`, off unless `enabled`). Feeds are
 ## 5. Web UI
 
 - Server-rendered `html/template`, one hand-written `static/app.js` at most. No npm, no
-  bundler, no SPA. Auto-refresh every 60 s.
+  bundler, no SPA. Auto-refresh every 60 s: `app.js` fetches the page and swaps
+  `<main>` in place (no full reload); a `<noscript>` meta refresh covers no-JS.
 - Dark theme in Monster Puppet colours (red accent). Works at phone width.
 - **Home:** one row per host with its worst state, then the cross-host groups (Tailscale,
   ports, certs, licences). Red and stale sort to the top. Every check shows its age.

@@ -124,7 +124,7 @@ func TestPages(t *testing.T) {
 	if strings.Contains(h, "<script>alert") || !strings.Contains(h, "&lt;script&gt;") {
 		t.Error("summary not escaped")
 	}
-	for _, want := range []string{"monster-p4", "jenkins-win", "never reported", "host.uptime", `http-equiv="refresh"`, "/static/style.css"} {
+	for _, want := range []string{"monster-p4", "jenkins-win", "never reported", "host.uptime", `http-equiv="refresh"`, "/static/app.js", "/static/style.css"} {
 		if !strings.Contains(h, want) {
 			t.Errorf("home lacks %q", want)
 		}
