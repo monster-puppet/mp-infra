@@ -924,6 +924,44 @@ pre.data {
   opacity: 0.55;
 }
 
+/* Endpoint workstations: a mini card with their checks on hover or focus. */
+.device-endpoint {
+  position: relative;
+  cursor: default;
+}
+.device-endpoint.device-off:hover,
+.device-endpoint.device-off:focus-within { opacity: 1; }
+.device-card {
+  display: none;
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  top: 100%;
+  width: min(360px, 90vw);
+  padding: 0.75rem 0.9rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.device-endpoint:hover .device-card,
+.device-endpoint:focus-within .device-card { display: block; }
+.device-card.state-warn { box-shadow: inset 3px 0 0 var(--warn), 0 10px 30px rgba(0, 0, 0, 0.45); }
+.device-card.state-crit { box-shadow: inset 3px 0 0 var(--crit), 0 10px 30px rgba(0, 0, 0, 0.45); }
+.device-card.state-stale { box-shadow: inset 3px 0 0 var(--stale), 0 10px 30px rgba(0, 0, 0, 0.45); }
+.device-card h3 { font-size: 0.95rem; margin: 0; }
+.mini-checks { list-style: none; margin: 0.5rem 0; font-size: 0.8rem; }
+.mini-checks li {
+  display: grid;
+  grid-template-columns: auto 6.5rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.15rem 0;
+}
+.mini-name { color: var(--text-muted); }
+.mini-sum { color: var(--text); overflow-wrap: anywhere; }
+.device-more { font-size: 0.8rem; }
+
 .os-laptop, .os-phone, .os-device { color: var(--text); }
 
 .offline {

@@ -123,6 +123,16 @@ func TestHomeDrawsEndpointsInTailnet(t *testing.T) {
 	if strings.Contains(body, `class="device-label">jenkins</text>`) {
 		t.Error("server host drawn as a tailnet device")
 	}
+	// In the Tailnet card with a mini card, not among the agents.
+	for _, want := range []string{`class="device-card state-warn"`, `<h3>Ricky&#39;s PC</h3>`,
+		`<span class="mini-name">boot</span><span class="mini-sum">Secure Boot off</span>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("tailnet card lacks %q", want)
+		}
+	}
+	if strings.Contains(body, `Ricky&#39;s PC</a></h3>`) {
+		t.Error("endpoint shown as an agent card")
+	}
 	if strings.Contains(body, `<a href="/history?host=rchau-pc" class="map-node`) {
 		t.Error("endpoint drawn as a host node")
 	}

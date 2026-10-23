@@ -65,6 +65,8 @@ func New(srv *server.Server, who Whoiser) *Web {
 		"date":     func(t time.Time) string { return t.Local().Format("2006-01-02 15:04") },
 		"checkURL": checkURL,
 		"shortID":  shortID,
+		// checkName is a check's name on an endpoint's mini card: "bitlocker".
+		"checkName": func(host, id string) string { return strings.TrimPrefix(shortID(host, id), "endpoint.") },
 		"add":      func(a, b any) float64 { return num(a) + num(b) },
 		"sub":      func(a, b any) float64 { return num(a) - num(b) },
 		"half":     func(a any) float64 { return num(a) / 2 },
@@ -441,11 +443,15 @@ type deviceView struct {
 	Tags   string
 	Seen   string
 	// Set for an endpoint host: its name, its row's state, a link to its checks
-	// and what is wrong ("Secure Boot off"), or "" when all is well.
+	// and what is wrong ("Secure Boot off"), or "" when all is well. Label, Note
+	// and Checks fill the mini card shown on hover.
 	Host    string
 	State   eval.State
 	Href    string
 	Problem string
+	Label   string
+	Note    string
+	Checks  []checkView
 }
 
 // deviceFamily maps a Tailscale device OS to an icon family.
@@ -541,6 +547,7 @@ func (t *tailnetView) markEndpoints(rows []rowView) {
 				continue
 			}
 			ds[i].State, ds[i].Href = r.State, r.Link
+			ds[i].Label, ds[i].Note, ds[i].Checks = r.Name, r.Note, r.Checks
 			worst := eval.OK
 			for _, c := range r.Checks {
 				if c.Effective != eval.OK && eval.Worst(worst, c.Effective) != worst {
@@ -554,6 +561,28 @@ func (t *tailnetView) markEndpoints(rows []rowView) {
 	}
 	mark(t.Online)
 	mark(t.Offline)
+}
+
+// problemsOnly keeps the endpoint devices that are not ok, or returns nil when
+// there are none: personal devices carry no state.
+func (t *tailnetView) problemsOnly() *tailnetView {
+	if t == nil {
+		return nil
+	}
+	keep := func(ds []deviceView) []deviceView {
+		var out []deviceView
+		for _, d := range ds {
+			if d.Host != "" && d.State != eval.OK && d.State != "" {
+				out = append(out, d)
+			}
+		}
+		return out
+	}
+	p := &tailnetView{Online: keep(t.Online), Offline: keep(t.Offline), Age: t.Age}
+	if len(p.Online)+len(p.Offline) == 0 {
+		return nil
+	}
+	return p
 }
 
 // groups are the cross-host rows on the home page, by check id prefix.
@@ -676,10 +705,23 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 	}
 	d.Tailnet.markEndpoints(d.Hosts)
 	d.Map = buildMap(hosts, w.srv.Cfg.Links, d.Hosts, all, d.Tailnet)
+	// Workstations live in the Tailnet card, not among the agents; they still
+	// count toward the overall state.
+	var agents []rowView
+	for _, row := range d.Hosts {
+		d.Overall = eval.Worst(d.Overall, row.State)
+		if !w.srv.Cfg.IsEndpoint(row.Host) {
+			agents = append(agents, row)
+		}
+	}
+	d.Hosts = agents
 	sortRows(d.Hosts)
 	for _, g := range groups {
 		var cs []checkView
 		for _, c := range all {
+			if w.srv.Cfg.IsEndpoint(c.Host) {
+				continue
+			}
 			for _, p := range g.prefixes {
 				if strings.HasPrefix(c.ID, p) {
 					cs = append(cs, c)
@@ -694,17 +736,13 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 	counts := map[eval.State]int{}
-	for _, row := range d.Hosts {
-		d.Overall = eval.Worst(d.Overall, row.State)
-	}
 	if c, err := r.Cookie(viewCookie); err == nil && c.Value == "problems" {
 		d.Problems = true
 		var n int
 		d.Hosts, d.Hidden = problemsOnly(d.Hosts)
 		d.Groups, n = problemsOnly(d.Groups)
 		d.Hidden += n
-		// The device list carries no state, so there is nothing in it to show.
-		d.Tailnet = nil
+		d.Tailnet = d.Tailnet.problemsOnly()
 	}
 	sortRows(d.Groups)
 	// Wide groups first, so the narrow ones after them fill whole rows.

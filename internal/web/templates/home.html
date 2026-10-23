@@ -115,7 +115,7 @@
 {{end}}
 
 {{if .Hosts}}
-<h2 class="section-title">Hosts</h2>
+<h2 class="section-title">Agents</h2>
 <div class="grid grid-hosts">
 {{range .Hosts}}{{template "row" .}}{{end}}
 </div>
@@ -144,16 +144,27 @@
 </div>
 {{end}}
 
-{{if and .Problems (not .Hosts) (not .Groups)}}
+{{if and .Problems (not .Hosts) (not .Groups) (not .Tailnet)}}
 <p class="card all-clear">Nothing needs attention.{{with .Hidden}} {{.}} ok check{{if ne . 1}}s{{end}} hidden.{{end}} <a href="/?view=all">Show all</a></p>
 {{end}}
 {{end}}{{end}}
 
 {{define "device"}}
-<li class="device{{if .Seen}} device-off{{end}}">
+<li class="device{{if .Seen}} device-off{{end}}{{if .Host}} device-endpoint{{end}}"{{if .Host}} tabindex="0"{{end}}>
   {{template "osicon" .}}
   <span class="device-name">{{if .Href}}<a href="{{.Href}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}{{with .State}} <span class="dot dot-{{.}}" title="{{.}}"></span>{{end}}</span>
   <span class="device-meta">{{with .OSName}}{{.}}{{end}}{{with .Addr}} · <span class="mono">{{.}}</span>{{end}}{{with .Tags}} · {{.}}{{end}}{{with .Seen}} · {{.}}{{end}}{{with .Problem}} · {{.}}{{end}}</span>
+  {{if .Host}}
+  <div class="device-card state-{{.State}}" role="tooltip">
+    <header class="row-head"><h3>{{.Label}}</h3>{{template "badge" .State}}</header>
+    <p class="row-note"><span class="mono">{{.Host}}</span>{{with .Note}} · {{.}}{{end}}</p>
+    <ul class="mini-checks">
+    {{range .Checks}}<li><span class="dot dot-{{.Effective}}"></span><span class="mini-name">{{checkName .Host .ID}}</span><span class="mini-sum">{{.Summary}}</span></li>
+    {{else}}<li class="empty">no report yet</li>{{end}}
+    </ul>
+    <a class="device-more" href="{{.Href}}">All checks and history →</a>
+  </div>
+  {{end}}
 </li>
 {{end}}
 
