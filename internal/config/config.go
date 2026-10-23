@@ -55,7 +55,7 @@ type Server struct {
 	Notion     Notion       `yaml:"notion"`
 	// Notices reads vendors' public security feeds (see Notices).
 	Notices Notices `yaml:"notices"`
-	Alerts     Alerts       `yaml:"alerts"`
+	Alerts  Alerts  `yaml:"alerts"`
 	// GoogleLogin, when client_id is set, puts the UI behind Google sign-in on top
 	// of the tailnet. /healthz and /api/status.json stay open on the tailnet.
 	GoogleLogin GoogleLogin `yaml:"google_login"`
@@ -603,6 +603,7 @@ type Agent struct {
 	OfflineDB       *FileAge       `yaml:"offline_db"`
 	P4License       *Command       `yaml:"p4_license"`
 	Firewall        *Command       `yaml:"firewall"`
+	SSHD            *Command       `yaml:"sshd"`             // ssh.auth: `sshd -T`, keys only or passwords too
 	SecurityUpdates string         `yaml:"security_updates"` // dnf, apt or windows
 	Versions        []Version      `yaml:"versions"`
 	AuthFailures    *AuthFailures  `yaml:"auth_failures"`
@@ -742,9 +743,9 @@ func LoadAgent(path string) (*Agent, error) {
 			}
 		}
 	}
-	for _, cmd := range []*Command{c.P4License, c.Firewall} {
+	for _, cmd := range []*Command{c.P4License, c.Firewall, c.SSHD} {
 		if cmd != nil && len(cmd.Cmd) == 0 {
-			return nil, fmt.Errorf("%s: p4_license and firewall need a cmd", path)
+			return nil, fmt.Errorf("%s: p4_license, firewall and sshd need a cmd", path)
 		}
 	}
 	if c.Windows != nil && c.Windows.TailscaleService == "" {

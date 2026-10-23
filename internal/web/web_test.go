@@ -422,6 +422,48 @@ func TestNetMap(t *testing.T) {
 	}
 }
 
+func TestNetMapSSHAuth(t *testing.T) {
+	hosts := []config.Host{{Name: "a", PublicIP: "192.0.2.1"}, {Name: "b", PublicIP: "192.0.2.2"}, {Name: "c", PublicIP: "192.0.2.3"}}
+	cv := func(host, id string, s eval.State, data string) checkView {
+		return checkView{Check: store.Check{Host: host, ID: id, State: s, Summary: id, Data: data}, Effective: s}
+	}
+	ports := `{"open":[22,443],"expected":[22,443]}`
+	all := []checkView{
+		cv("a", "ports.public.a", eval.OK, ports),
+		cv("a", "ssh.auth.a", eval.OK, `{"ports":[22],"mode":"key"}`),
+		cv("b", "ports.public.b", eval.OK, ports),
+		cv("b", "ssh.auth.b", eval.Warn, `{"ports":[22],"mode":"password"}`),
+		cv("c", "ports.public.c", eval.OK, ports),
+		cv("c", "ssh.auth.c", eval.OK, `{"ports":[22],"mode":"<script>"}`), // hostile report
+	}
+	m := buildMap(hosts, nil, nil, all, nil)
+	chip := func(n int, port string) mapBadge {
+		for _, b := range m.Nodes[n].Internet.Badges {
+			if b.Chip == port {
+				return b
+			}
+		}
+		t.Fatalf("node %d: no chip %s in %+v", n, port, m.Nodes[n].Internet.Badges)
+		return mapBadge{}
+	}
+	if c := chip(0, "22"); c.Auth != "key" || c.Class != "open" || !strings.Contains(c.Title, "keys only") || c.W != chipW("22")+authW {
+		t.Errorf("a:22 %+v", c)
+	}
+	if c := chip(0, "443"); c.Auth != "" {
+		t.Errorf("a:443 %+v", c)
+	}
+	b := m.Nodes[1].Internet
+	if c := chip(1, "22"); c.Auth != "password" || c.Class != "pwd" || !strings.Contains(c.Title, "accepts passwords") {
+		t.Errorf("b:22 %+v", c)
+	}
+	if b.State != "warn" || b.Alert != nil {
+		t.Errorf("b: passwords colour the line without an alert icon: %+v", b)
+	}
+	if c := chip(2, "22"); c.Auth != "" {
+		t.Errorf("c:22 took an unknown mode: %+v", c)
+	}
+}
+
 func TestNetMapLinks(t *testing.T) {
 	hosts := []config.Host{{Name: "a"}, {Name: "b"}, {Name: "c"}}
 	links := []config.Link{

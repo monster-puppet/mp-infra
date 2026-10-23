@@ -328,3 +328,40 @@ func TestCollectReportsCollectorFailure(t *testing.T) {
 		t.Errorf("collected payload does not validate: %v", err)
 	}
 }
+
+func TestSSHAuth(t *testing.T) {
+	// `sshd -T` prints every keyword, lowercase, one per line; "port" once per port.
+	base := "port 22\npermitrootlogin prohibit-password\npubkeyauthentication yes\n" +
+		"gssapiauthentication yes\nusepam yes\nauthenticationmethods any\n"
+	for _, tc := range []struct {
+		name, extra, mode string
+		state             eval.State
+		summary           string
+	}{
+		{"keys only", "passwordauthentication no\nkbdinteractiveauthentication no\n", "key", eval.OK, "SSH on 22: keys only, root by key"},
+		{"passwords", "passwordauthentication yes\nkbdinteractiveauthentication no\n", "password", eval.Warn, "SSH on 22 accepts passwords"},
+		{"keyboard-interactive", "passwordauthentication no\nkbdinteractiveauthentication yes\n", "password", eval.Warn, "SSH on 22 accepts passwords"},
+		{"old openssh", "passwordauthentication no\nchallengeresponseauthentication yes\n", "password", eval.Warn, "SSH on 22 accepts passwords"},
+		{"root by password", "passwordauthentication yes\nkbdinteractiveauthentication no\npermitrootlogin yes\n", "password", eval.Crit, "SSH on 22 accepts passwords, root included"},
+		{"key then password", "passwordauthentication yes\nkbdinteractiveauthentication no\nauthenticationmethods publickey,password\n", "key", eval.OK, "SSH on 22: keys only, root by key"},
+		{"key or password", "passwordauthentication yes\nkbdinteractiveauthentication no\nauthenticationmethods publickey password\n", "password", eval.Warn, "SSH on 22 accepts passwords"},
+		{"no way in", "pubkeyauthentication no\npasswordauthentication no\nkbdinteractiveauthentication no\n", "none", eval.OK, "SSH on 22: no key or password login"},
+	} {
+		// The first value of a keyword wins, as in sshd_config, so the case's
+		// lines go first.
+		c, err := sshAuthCheck("ssh.auth.h", tc.extra+base)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if c.State != tc.state || c.Summary != tc.summary || data(t, c)["mode"] != tc.mode {
+			t.Errorf("%s: %s %q %v", tc.name, c.State, c.Summary, data(t, c)["mode"])
+		}
+	}
+	c, err := sshAuthCheck("ssh.auth.h", "port 22\nport 2222\npubkeyauthentication yes\npasswordauthentication no\n")
+	if err != nil || c.Summary != "SSH on 22, 2222: keys only" {
+		t.Errorf("two ports: %q %v", c.Summary, err)
+	}
+	if _, err := sshAuthCheck("ssh.auth.h", "sshd: no hostkeys available -- exiting.\n"); err == nil {
+		t.Error("garbage output passed")
+	}
+}

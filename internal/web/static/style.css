@@ -1216,6 +1216,20 @@ pre.data {
 .mb-closed .chip { stroke: var(--warn); stroke-dasharray: 3 2; }
 .mb-closed .chip-text { fill: var(--warn); text-decoration: line-through; }
 
+/* SSH on a port chip: a key when it takes keys only, an amber password field when
+   it takes passwords too. */
+.auth-icon {
+  fill: none;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.auth-key { stroke: var(--ok); }
+.auth-password { stroke: var(--warn); stroke-width: 3; }
+.mb-pwd .chip { stroke: var(--warn); }
+.mb-pwd .chip-text { fill: var(--warn); }
+.mb-bad .auth-icon { stroke: var(--on-primary); }
+
 /* An active brute force: a red target that pulses. */
 .mb-active .badge-bg { fill: var(--crit); stroke: var(--crit); animation: attacked-badge 1.2s ease-in-out infinite; }
 .mb-active .map-icon { stroke: var(--on-primary); }
@@ -1243,6 +1257,19 @@ pre.data {
 }
 
 .lg-chip-bad { background: var(--crit); border-color: var(--crit); color: var(--on-primary); }
+.lg-chip-pwd { border-color: var(--warn); color: var(--warn); }
+.map-legend .lg-auth {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin: 0 0.2rem 0 0;
+  vertical-align: -0.1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .lg-chip-closed { border-style: dashed; border-color: var(--warn); color: var(--warn); text-decoration: line-through; }
 
 /* History chart on a check page: one series, so no legend; the title names it. */

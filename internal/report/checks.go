@@ -566,3 +566,101 @@ func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error, n
 	c.Data = mustJSON(d)
 	return c
 }
+
+// --- ssh.auth.<host> ---
+
+// sshAuthCheck reads `sshd -T` (the effective server config, one lowercase
+// "keyword value" per line) and says how someone gets in over SSH: with a key, or
+// with a password too. Keyboard-interactive counts as a password: with UsePAM it
+// is one. GSSAPI and host-based logins are left out; RHEL ships GSSAPI on, and it
+// needs a Kerberos realm these hosts do not have.
+//
+// Passwords are warn; passwords with root allowed to log in by password are crit.
+func sshAuthCheck(id, out string) (Check, error) {
+	cfg := map[string]string{}
+	var ports []int
+	for _, line := range strings.Split(out, "\n") {
+		k, v, ok := strings.Cut(strings.TrimSpace(line), " ")
+		if !ok {
+			continue
+		}
+		k, v = strings.ToLower(k), strings.TrimSpace(v)
+		if k == "port" {
+			if p, err := strconv.Atoi(v); err == nil && p > 0 && p < 65536 {
+				ports = append(ports, p)
+			}
+			continue
+		}
+		if _, seen := cfg[k]; !seen {
+			cfg[k] = v
+		}
+	}
+	if cfg["passwordauthentication"] == "" || cfg["pubkeyauthentication"] == "" {
+		return Check{}, errors.New("sshd -T output has no passwordauthentication or pubkeyauthentication")
+	}
+	if len(ports) == 0 {
+		ports = []int{22}
+	}
+	yes := func(k string) bool { return cfg[k] == "yes" }
+	pubkey, password := yes("pubkeyauthentication"), yes("passwordauthentication")
+	if v, ok := cfg["kbdinteractiveauthentication"]; ok {
+		password = password || v == "yes"
+	} else {
+		password = password || yes("challengeresponseauthentication") // OpenSSH before 8.7
+	}
+
+	// AuthenticationMethods lists the ways in, each a comma-separated chain of
+	// methods that must all pass. Without it ("any") any single method will do.
+	keyIn, pwdIn := pubkey, password
+	if m := cfg["authenticationmethods"]; m != "" && m != "any" {
+		keyIn, pwdIn = false, false
+		for _, chain := range strings.Fields(m) {
+			hasKey, hasPwd := false, false
+			for _, step := range strings.Split(chain, ",") {
+				step, _, _ = strings.Cut(step, ":") // keyboard-interactive:pam
+				switch step {
+				case "publickey":
+					hasKey = pubkey
+				case "password":
+					hasPwd = yes("passwordauthentication")
+				case "keyboard-interactive":
+					hasPwd = password
+				}
+			}
+			keyIn = keyIn || hasKey
+			// A chain that needs a key and a password still needs the key.
+			pwdIn = pwdIn || (hasPwd && !hasKey)
+		}
+	}
+	root := cfg["permitrootlogin"]
+	mode := "none"
+	switch {
+	case pwdIn:
+		mode = "password"
+	case keyIn:
+		mode = "key"
+	}
+
+	c := Check{ID: id, State: eval.OK}
+	ps := make([]string, len(ports))
+	for i, p := range ports {
+		ps[i] = strconv.Itoa(p)
+	}
+	on := "SSH on " + strings.Join(ps, ", ")
+	switch {
+	case mode == "password" && root == "yes":
+		c.State, c.Summary = eval.Crit, on+" accepts passwords, root included"
+	case mode == "password":
+		c.State, c.Summary = eval.Warn, on+" accepts passwords"
+	case mode == "key":
+		c.Summary = on + ": keys only"
+	default:
+		c.Summary = on + ": no key or password login"
+	}
+	if mode == "key" && root != "" && root != "no" {
+		c.Summary += ", root by key"
+	}
+	c.Data = mustJSON(map[string]any{"ports": ports, "mode": mode, "pubkey": pubkey, "password": password,
+		"methods": Clip(cfg["authenticationmethods"], 200), "permit_root_login": Clip(root, 40)})
+	return c, nil
+}

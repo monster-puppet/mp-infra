@@ -6,6 +6,9 @@ token: "PASTE_TOKEN_FROM_mpinfra_token"
 disks: ["/"]
 firewall:
   cmd: ["firewall-cmd", "--list-all"]
+# ssh.auth: how SSH lets people in (keys only, or passwords too), shown on the map
+sshd:
+  cmd: ["/usr/sbin/sshd", "-T"]
 security_updates: dnf
 versions:
   - name: jenkins

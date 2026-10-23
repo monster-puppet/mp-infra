@@ -22,7 +22,7 @@ import (
 
 // Which checks colour which line.
 var (
-	internetChecks = []string{"ports.public.", "auth.", "win.fw.", "fw.rules."}
+	internetChecks = []string{"ports.public.", "auth.", "win.fw.", "fw.rules.", "ssh.auth."}
 	tailnetChecks  = []string{"ts.online.", "ts.key_expiry.", "win.tailscale_service"}
 )
 
@@ -45,6 +45,7 @@ type mapLink struct {
 type portChip struct {
 	Port  int
 	Class string // open (expected), bad (open, not expected), closed (expected, closed)
+	Auth  string // SSH on this port: key (keys only), password, or ""
 }
 
 // mapBadge is an icon or a text chip sitting on a line.
@@ -53,6 +54,7 @@ type mapBadge struct {
 	W     float64 // chip width; icons are round
 	Icon  string  // link, clock, x, question, lock, alert, target
 	Chip  string
+	Auth  string // a chip's SSH login: key or password, drawn before the number
 	Class string // the colour: ok, warn, crit, stale, none, or a portChip class
 	Title string
 	Href  string
@@ -275,6 +277,9 @@ const (
 
 func chipW(text string) float64 { return 12 + 7*float64(len(text)) }
 
+// authW is the room a key or password icon takes in a port chip.
+const authW = 14.0
+
 // wideBadges lays out the line's badges in a row centred on (x, y): the alert
 // first, then one chip per port.
 func (l mapLink) wideBadges(x, y float64) []mapBadge {
@@ -294,7 +299,11 @@ func (l mapLink) wideBadges(x, y float64) []mapBadge {
 		ports, more = ports[:maxChips-1], len(ports)-(maxChips-1)
 	}
 	for _, p := range ports {
-		bs = append(bs, mapBadge{Chip: fmt.Sprint(p.Port), Class: p.Class, Title: portTitle(p), Href: l.Href})
+		cls := p.Class
+		if cls == "open" && p.Auth == "password" {
+			cls = "pwd"
+		}
+		bs = append(bs, mapBadge{Chip: fmt.Sprint(p.Port), Auth: p.Auth, Class: cls, Title: portTitle(p), Href: l.Href})
 	}
 	if more > 0 {
 		bs = append(bs, mapBadge{Chip: fmt.Sprintf("+%d", more), Class: "open", Title: l.Title, Href: l.Href})
@@ -305,6 +314,9 @@ func (l mapLink) wideBadges(x, y float64) []mapBadge {
 			bs[i].W = iconW
 		} else {
 			bs[i].W = chipW(bs[i].Chip)
+			if bs[i].Auth != "" {
+				bs[i].W += authW
+			}
 		}
 		total += bs[i].W + badgeGap
 	}
@@ -351,13 +363,22 @@ func (l mapLink) narrowBadge(x, y float64) []mapBadge {
 }
 
 func portTitle(p portChip) string {
+	var t string
 	switch p.Class {
 	case "bad":
-		return fmt.Sprintf("port %d open, not expected", p.Port)
+		t = fmt.Sprintf("port %d open, not expected", p.Port)
 	case "closed":
-		return fmt.Sprintf("port %d expected open, closed", p.Port)
+		t = fmt.Sprintf("port %d expected open, closed", p.Port)
+	default:
+		t = fmt.Sprintf("port %d open", p.Port)
 	}
-	return fmt.Sprintf("port %d open", p.Port)
+	switch p.Auth {
+	case "key":
+		t += " · SSH: keys only"
+	case "password":
+		t += " · SSH accepts passwords"
+	}
+	return t
 }
 
 // buildMap makes the map from the configured hosts and every current check.
@@ -573,11 +594,16 @@ func internetLink(on bool, cs []checkView) mapLink {
 		return l
 	}
 	summarize(&l, cs)
-	var ports *checkView
+	var ports, ssh *checkView
 	var problem *checkView
 	for i, c := range cs {
 		if strings.HasPrefix(c.ID, "ports.public.") {
 			ports = &cs[i]
+			continue
+		}
+		// Shown on the SSH port's chip, not as an alert; it still colours the line.
+		if strings.HasPrefix(c.ID, "ssh.auth.") {
+			ssh = &cs[i]
 			continue
 		}
 		if c.Effective != eval.OK && (problem == nil || c.Effective.Severity() > problem.Effective.Severity()) {
@@ -616,15 +642,16 @@ func internetLink(on bool, cs []checkView) mapLink {
 	for _, p := range d.Unexpected {
 		bad[p] = true
 	}
+	auth := sshAuth(ssh)
 	for _, p := range d.Open {
 		cls := "open"
 		if bad[p] {
 			cls = "bad"
 		}
-		l.Ports = append(l.Ports, portChip{p, cls})
+		l.Ports = append(l.Ports, portChip{p, cls, auth[p]})
 	}
 	for _, p := range d.Closed {
-		l.Ports = append(l.Ports, portChip{p, "closed"})
+		l.Ports = append(l.Ports, portChip{p, "closed", ""})
 	}
 	sort.Slice(l.Ports, func(i, j int) bool { return l.Ports[i].Port < l.Ports[j].Port })
 	if len(l.Ports) == 0 && problem == nil {
@@ -634,6 +661,27 @@ func internetLink(on bool, cs []checkView) mapLink {
 		l.Href = checkURL(ports.Host, ports.ID)
 	}
 	return l
+}
+
+// sshAuth maps the host's SSH ports to how sshd lets people in (key or
+// password), from ssh.auth.<host>. The data comes from the host's report, so only
+// the two known modes are kept.
+func sshAuth(c *checkView) map[int]string {
+	if c == nil {
+		return nil
+	}
+	var d struct {
+		Ports []int  `json:"ports"`
+		Mode  string `json:"mode"`
+	}
+	if json.Unmarshal([]byte(c.Data), &d) != nil || (d.Mode != "key" && d.Mode != "password") {
+		return nil
+	}
+	out := map[int]string{}
+	for _, p := range d.Ports {
+		out[p] = d.Mode
+	}
+	return out
 }
 
 func hasPrefix(id string, prefixes []string) bool {

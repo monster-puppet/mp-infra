@@ -106,6 +106,17 @@ func collectors(cfg *config.Agent) []collector {
 			return []Check{firewallCheck(id, out)}, nil
 		}})
 	}
+	if cmd := cfg.SSHD; cmd != nil {
+		id := "ssh.auth." + cfg.Host
+		cs = append(cs, collector{id: id, onError: eval.Warn, run: func(ctx context.Context) ([]Check, error) {
+			out, err := run(ctx, cmd.Cmd, cmd.Env)
+			if err != nil {
+				return nil, err
+			}
+			c, err := sshAuthCheck(id, out)
+			return []Check{c}, err
+		}})
+	}
 	if src := cfg.SecurityUpdates; src != "" {
 		id := "os.security_updates." + cfg.Host
 		cs = append(cs, collector{id: id, onError: eval.Warn, run: func(ctx context.Context) ([]Check, error) {

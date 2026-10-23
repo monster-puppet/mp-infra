@@ -94,7 +94,7 @@
     </a>
     {{end}}
   </svg>
-  <p class="map-legend"><span class="lg lg-ok"></span>ok <span class="lg lg-warn"></span>warn <span class="lg lg-crit"></span>crit <span class="lg lg-stale"></span>stale <span class="lg lg-none"></span>no data · <span class="lg-chip">22</span> open port <span class="lg-chip lg-chip-bad">8080</span> unexpected <span class="lg-chip lg-chip-closed">443</span> expected, closed</p>
+  <p class="map-legend"><span class="lg lg-ok"></span>ok <span class="lg lg-warn"></span>warn <span class="lg lg-crit"></span>crit <span class="lg lg-stale"></span>stale <span class="lg lg-none"></span>no data · <span class="lg-chip">22</span> open port <span class="lg-chip lg-chip-bad">8080</span> unexpected <span class="lg-chip lg-chip-closed">443</span> expected, closed · <span class="lg-chip"><svg class="lg-auth" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg>22</span> SSH keys only <span class="lg-chip lg-chip-pwd"><svg class="lg-auth" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M7 12h.01M12 12h.01M17 12h.01"/></svg>22</span> SSH accepts passwords</p>
 </section>
 {{end}}
 
@@ -180,7 +180,10 @@
 
 {{define "hostlink"}}<a href="{{or .Href "#"}}" class="map-link host-link link-{{.State}}"><title>{{.Title}}</title><path d="{{.Path}}" class="link-hit"/><path d="{{.Path}}" class="link-line"/><path d="{{.Arrow}}" class="link-arrow"/></a>{{end}}
 
-{{define "badges"}}{{range .}}<a href="{{or .Href "#"}}" class="map-badge mb-{{.Class}}"><title>{{.Title}}</title>{{if .Icon}}<circle cx="{{.X}}" cy="{{.Y}}" r="13" class="badge-bg"/>{{template "mapicon" .}}{{else}}<rect x="{{sub .X (half .W)}}" y="{{sub .Y 10}}" width="{{.W}}" height="20" rx="10" class="chip"/><text x="{{.X}}" y="{{add .Y 4}}" class="chip-text">{{.Chip}}</text>{{end}}</a>{{end}}{{end}}
+{{define "badges"}}{{range .}}<a href="{{or .Href "#"}}" class="map-badge mb-{{.Class}}"><title>{{.Title}}</title>{{if .Icon}}<circle cx="{{.X}}" cy="{{.Y}}" r="13" class="badge-bg"/>{{template "mapicon" .}}{{else}}<rect x="{{sub .X (half .W)}}" y="{{sub .Y 10}}" width="{{.W}}" height="20" rx="10" class="chip"/>{{if .Auth}}{{template "authicon" .}}<text x="{{add .X 7}}" y="{{add .Y 4}}" class="chip-text">{{.Chip}}</text>{{else}}<text x="{{.X}}" y="{{add .Y 4}}" class="chip-text">{{.Chip}}</text>{{end}}{{end}}</a>{{end}}{{end}}
+
+{{/* How SSH on a port chip lets people in: a key, or a password field. 24-unit grid at 0.5, left in the chip. */}}
+{{define "authicon"}}<g class="auth-icon auth-{{.Auth}}" transform="translate({{add (sub .X (half .W)) 5}} {{sub .Y 6}}) scale(0.5)">{{if eq .Auth "key"}}<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>{{else}}<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M7 12h.01M12 12h.01M17 12h.01"/>{{end}}</g>{{end}}
 
 {{define "attackicon"}}<g class="map-badge mb-active"><circle cx="{{.X}}" cy="{{.Y}}" r="13" class="badge-bg"/>{{template "mapicon" .}}</g>{{end}}
 
