@@ -511,8 +511,12 @@ func TestMetersAndChart(t *testing.T) {
 	e.post("tok-jenkins", disk(72)) // now
 
 	h := e.get("/").Body.String()
-	if !strings.Contains(h, `class="meter-fill fill-ok" style="width: 72.0%"`) || !strings.Contains(h, ">72%<") {
+	if !strings.Contains(h, `<rect width="72.0" height="6" class="meter-fill fill-ok"/>`) || !strings.Contains(h, ">72%<") {
 		t.Errorf("home lacks the disk meter")
+	}
+	// The CSP allows no inline styles, so nothing may depend on one.
+	if strings.Contains(h, "style=") {
+		t.Errorf("home uses a style attribute, which the CSP blocks")
 	}
 
 	p := e.get("/check/jenkins/disk.jenkins.root").Body.String()

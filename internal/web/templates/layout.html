@@ -61,4 +61,6 @@
 {{end}}
 {{end}}
 
-{{define "meters"}}{{if .Meters}}{{$s := .Effective}}<span class="meters">{{range .Meters}}<span class="meter" title="{{.Title}}">{{with .Name}}<span class="meter-name">{{.}}</span>{{end}}<span class="meter-track"><span class="meter-fill fill-{{$s}}" style="width: {{printf "%.1f" .Pct}}%"></span></span><span class="meter-value">{{.Value}}</span></span>{{end}}</span>{{end}}{{end}}
+{{/* The fill is an SVG width, not a style attribute: the CSP has no
+   'unsafe-inline' for styles, so a style="width" would be dropped. */}}
+{{define "meters"}}{{if .Meters}}{{$s := .Effective}}<span class="meters">{{range .Meters}}<span class="meter" title="{{.Title}}">{{with .Name}}<span class="meter-name">{{.}}</span>{{end}}<svg class="meter-track" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect width="100" height="6" class="meter-bg"/><rect width="{{printf "%.1f" .Pct}}" height="6" class="meter-fill fill-{{$s}}"/></svg><span class="meter-value">{{.Value}}</span></span>{{end}}</span>{{end}}{{end}}

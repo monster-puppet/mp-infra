@@ -502,24 +502,18 @@ form.nav-user {
 
 .meter-track {
   flex: 1;
+  min-width: 0;
   height: 6px;
   border-radius: 3px;
-  background: rgba(250, 239, 195, 0.1);
   overflow: hidden;
 }
 
-.meter-fill {
-  display: block;
-  height: 100%;
-  min-width: 2px;
-  border-radius: 3px;
-  background: var(--text-muted);
-}
-
-.fill-ok { background: var(--ok); }
-.fill-warn { background: var(--warn); }
-.fill-crit { background: var(--crit); }
-.fill-stale { background: var(--stale); }
+.meter-bg { fill: rgba(250, 239, 195, 0.1); }
+.meter-fill { fill: var(--text-muted); }
+.fill-ok { fill: var(--ok); }
+.fill-warn { fill: var(--warn); }
+.fill-crit { fill: var(--crit); }
+.fill-stale { fill: var(--stale); }
 
 .meter-value {
   font-variant-numeric: tabular-nums;
