@@ -15,9 +15,13 @@
   (docs/spec.md predates that). Tailnet IP 100.86.1.7. The UI is at
   https://mp-infra.tailce223.ts.net behind `tailscale serve`, with Google sign-in.
   `infra.monster-puppet.com` redirects there.
-- Deploy is `/update-mpinfra.sh` on that VM: it pulls `main`, runs `make check`, builds,
-  installs, and rolls back if `http://127.0.0.1:8098/healthz` fails. So when you report
-  a change, tell Marcus to run `/update-mpinfra.sh` on mp-infra. Never point him at jenkins.
+- Deploy is `scripts/deploy.sh`, run by Marcus from TACCO-PC in a real terminal (it asks
+  for sudo passwords). It ships origin/main to the server and every agent in
+  `deploy/hosts`; `scripts/deploy.sh --agents` or `scripts/deploy.sh <host>...` narrow
+  it. On the VM, `/update-mpinfra.sh` (pull, `make check`, build, install, roll back if
+  `http://127.0.0.1:8098/healthz` fails) is what deploy.sh runs for the server. So when
+  you report a change, tell Marcus to run `scripts/deploy.sh`, or `scripts/deploy.sh
+  -n` first to see what ships. Never point him at jenkins.
 - **Never bind the UI to port 8000 there.** exe.dev's proxy publishes port 8000 to the
   internet as mp-infra.exe.xyz, so the dashboard was briefly public on 2026-10-22.
 - Reporting hosts: monster-p4, jenkins, jenkins-win (tag:ci-untrusted), and p4-game
