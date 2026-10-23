@@ -1045,8 +1045,17 @@ pre.data {
   animation: flow 1.6s linear infinite;
 }
 
-.link-warn .link-line { stroke: var(--warn); }
-.link-crit .link-line { stroke: var(--crit); stroke-width: 3.5; filter: url(#glow); }
+/* Warn and crit lines glow and pulse so they pull the eye; crit faster. */
+.link-warn .link-line,
+.link-warn .link-arrow,
+.link-crit .link-line,
+.link-crit .link-arrow { filter: url(#glow); }
+.map-narrow .link-warn .link-line,
+.map-narrow .link-warn .link-arrow,
+.map-narrow .link-crit .link-line,
+.map-narrow .link-crit .link-arrow { filter: url(#glow-narrow); }
+.link-warn .link-line { stroke: var(--warn); stroke-width: 3; animation: pulse 2.4s ease-in-out infinite; }
+.link-crit .link-line { stroke: var(--crit); stroke-width: 3.5; animation: pulse 1.2s ease-in-out infinite; }
 .link-stale .link-line { stroke: var(--stale); stroke-dasharray: 6 6; }
 .link-none .link-line { stroke: var(--text-muted); stroke-opacity: 0.4; stroke-dasharray: 3 6; }
 
@@ -1076,6 +1085,7 @@ pre.data {
 .link-stale .link-arrow { fill: var(--stale); fill-opacity: 1; }
 
 @keyframes flow { to { stroke-dashoffset: -20; } }
+@keyframes pulse { 50% { stroke-opacity: 0.55; } }
 
 .node-box {
   fill: #1f1918;
@@ -1173,6 +1183,8 @@ pre.data {
 
 @media (prefers-reduced-motion: reduce) {
   .link-ok .link-line,
+  .link-warn .link-line,
+  .link-crit .link-line,
   .node-attacked .node-box { animation: none; }
 }
 

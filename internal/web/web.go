@@ -68,6 +68,7 @@ func New(srv *server.Server, who Whoiser) *Web {
 		"sub":      func(a, b any) float64 { return num(a) - num(b) },
 		"half":     func(a any) float64 { return num(a) / 2 },
 		"badge":    func(x, y any) mapBadge { return mapBadge{X: num(x), Y: num(y), Icon: "target"} },
+		"glowArgs": func(id string, w, h any) mapGlow { return mapGlow{ID: id, W: num(w), H: num(h)} },
 		"pathEsc":  url.PathEscape,
 		"label":    w.label,
 		"osName":   func(os string) string { return config.OSNames[os] },

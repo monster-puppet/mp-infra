@@ -49,6 +49,14 @@ type portChip struct {
 }
 
 // mapBadge is an icon or a text chip sitting on a line.
+// mapGlow is the glow filter for one map SVG. Each SVG needs its own copy: the
+// wide and narrow maps are never both displayed, and a filter inside a hidden
+// SVG does not render.
+type mapGlow struct {
+	ID   string
+	W, H float64
+}
+
 type mapBadge struct {
 	X, Y  float64
 	W     float64 // chip width; icons are round

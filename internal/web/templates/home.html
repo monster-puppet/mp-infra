@@ -15,7 +15,7 @@
 <section class="card netmap" aria-label="Network map">
   <svg class="map-wide" viewBox="0 0 {{.W}} {{.H}}" role="img" aria-label="Hosts between the internet and the tailnet">
     <defs>
-      <filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      {{template "glow" (glowArgs "glow" .W .H)}}
     </defs>
     <g class="bubble bubble-internet">
       <title>Internet</title>
@@ -63,6 +63,9 @@
     {{end}}
   </svg>
   <svg class="map-narrow" viewBox="0 0 {{.NW}} {{.NH}}" role="img" aria-label="Hosts between the internet and the tailnet">
+    <defs>
+      {{template "glow" (glowArgs "glow-narrow" .NW .NH)}}
+    </defs>
     <g class="bubble bubble-internet">
       <title>Internet</title>
       <rect x="12" y="10" width="{{sub .NW 24}}" height="68" rx="34"/>
@@ -168,6 +171,11 @@
   </ul>
 </article>
 {{end}}
+
+{{/* Glow for warn and crit lines. userSpaceOnUse over the whole map: a
+     straight line has a zero-height bounding box, which would clip a
+     bbox-relative filter region to nothing. */}}
+{{define "glow"}}<filter id="{{.ID}}" filterUnits="userSpaceOnUse" x="0" y="0" width="{{.W}}" height="{{.H}}"><feGaussianBlur in="SourceGraphic" stdDeviation="6" result="wide"/><feGaussianBlur in="SourceGraphic" stdDeviation="2" result="tight"/><feMerge><feMergeNode in="wide"/><feMergeNode in="wide"/><feMergeNode in="tight"/><feMergeNode in="SourceGraphic"/></feMerge></filter>{{end}}
 
 {{define "maplink"}}{{if .On}}<a href="{{or .Href "#"}}" class="map-link link-{{.State}}">{{with .Title}}<title>{{.}}</title>{{end}}<path d="{{.Path}}" class="link-hit"/><path d="{{.Path}}" class="link-line"/></a>{{end}}{{end}}
 
