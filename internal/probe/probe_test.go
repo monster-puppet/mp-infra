@@ -84,6 +84,43 @@ func TestTCPAndHTTP(t *testing.T) {
 	}
 }
 
+func TestHTTPContainsAndLocation(t *testing.T) {
+	// The website: the apex 308s to www, www serves the page. The 2026-10-18 outage
+	// (apex record gone) fails the request; a parked page or a wrong redirect must
+	// fail too.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/apex":
+			http.Redirect(w, r, "https://www.example.com/", http.StatusPermanentRedirect)
+		case "/parked":
+			w.Write([]byte("<title>This domain is for sale</title>"))
+		default:
+			w.Write([]byte("<title>Monster Puppet — Game Co-Development Studio</title>"))
+		}
+	}))
+	defer srv.Close()
+	p := newProber(t, &config.Server{HTTP: []config.HTTPTarget{
+		{Name: "apex", URL: srv.URL + "/apex", Location: "https://www.example.com/"},
+		{Name: "apex-wrong", URL: srv.URL + "/apex", Location: "https://elsewhere.example/"},
+		{Name: "www", URL: srv.URL + "/", Status: 200, Contains: "Monster Puppet"},
+		{Name: "parked", URL: srv.URL + "/parked", Status: 200, Contains: "Monster Puppet"},
+		{Name: "gone", URL: "http://no-such-host.invalid/", Contains: "Monster Puppet"},
+	}})
+	p.now = time.Now
+	h := p.httpChecks(context.Background())
+	for id, want := range map[string]eval.State{"http.apex": eval.OK, "http.apex-wrong": eval.Crit, "http.www": eval.OK, "http.parked": eval.Crit, "http.gone": eval.Crit} {
+		if c := find(t, h, id); c.State != want {
+			t.Errorf("%s: %s %q, want %s", id, c.State, c.Summary, want)
+		}
+	}
+	if c := find(t, h, "http.parked"); !strings.Contains(c.Summary, `lacks "Monster Puppet"`) {
+		t.Errorf("parked summary: %q", c.Summary)
+	}
+	if c := find(t, h, "http.apex"); !strings.Contains(c.Summary, "to https://www.example.com/") {
+		t.Errorf("apex summary: %q", c.Summary)
+	}
+}
+
 func TestTLS(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer srv.Close()

@@ -136,6 +136,7 @@ see deploy.md).
 | `win.fw.allow_any` | jenkins-win report: enabled inbound allow rules with RemoteAddress Any | none / — / any |
 | `tls.<name>` | serve probe | > 21 days / > 7 / less |
 | `dns.<name>` | serve probe: A record vs. expected | match / — / mismatch |
+| `http.<name>` | serve probe: GET without following redirects. Optional `status` (exact), `location` (prefix of the redirect target), `contains` (text in the first MiB of the body) | all met / — / failed request, wrong status, wrong redirect, or text missing (a parked or wrong site) |
 
 ### Patches and limits (phase 2)
 

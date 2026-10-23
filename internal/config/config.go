@@ -142,6 +142,12 @@ type HTTPTarget struct {
 	Name   string `yaml:"name"`
 	URL    string `yaml:"url"`
 	Status int    `yaml:"status"` // expected status; 0 means any 2xx/3xx
+	// Contains, when set, must appear in the first MiB of the body, so a parked
+	// page or another site answering 200 is caught too.
+	Contains string `yaml:"contains"`
+	// Location, when set, must be the start of the redirect target (a 3xx's
+	// Location header), e.g. the apex redirecting to www.
+	Location string `yaml:"location"`
 }
 
 type TCPTarget struct {

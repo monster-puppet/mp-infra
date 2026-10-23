@@ -82,6 +82,16 @@ dns:
 http:
   - name: code-review
     url: "https://CODE_REVIEW_HOST/"
+  # The public website (Framer). The apex 308s to www; www must serve the real page.
+  # Crit (Slack at once) when the name stops resolving, the redirect points
+  # elsewhere, or a parked/wrong page answers instead.
+  - name: website-apex
+    url: "https://WEBSITE_DOMAIN/"
+    location: "https://www.WEBSITE_DOMAIN/"
+  - name: website
+    url: "https://www.WEBSITE_DOMAIN/"
+    status: 200
+    contains: "WEBSITE_TITLE_TEXT"
 
 tcp:
   - name: p4

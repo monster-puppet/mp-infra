@@ -1,9 +1,11 @@
 package probe
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -54,18 +56,32 @@ func (p *Prober) httpChecks(ctx context.Context) []Check {
 			out = append(out, errCheck(config.ServeHost, id, eval.Crit, err))
 			continue
 		}
+		var body []byte
+		if t.Contains != "" {
+			body, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		}
 		resp.Body.Close()
 		rtt := p.now().Sub(start)
 		ok := resp.StatusCode < 400
 		if t.Status != 0 {
 			ok = resp.StatusCode == t.Status
 		}
-		c := Check{Host: config.ServeHost, ID: id, State: eval.OK,
-			Summary: fmt.Sprintf("%s in %d ms", resp.Status, rtt.Milliseconds()),
-			Data:    map[string]any{"url": t.URL, "status": resp.StatusCode, "rtt_ms": rtt.Milliseconds()}}
-		if !ok {
-			c.State = eval.Crit
-			c.Summary = "unexpected " + c.Summary
+		loc := resp.Header.Get("Location")
+		data := map[string]any{"url": t.URL, "status": resp.StatusCode, "rtt_ms": rtt.Milliseconds()}
+		if loc != "" {
+			data["location"] = clip(loc, 200)
+		}
+		c := Check{Host: config.ServeHost, ID: id, State: eval.OK, Data: data,
+			Summary: fmt.Sprintf("%s in %d ms", resp.Status, rtt.Milliseconds())}
+		switch {
+		case !ok:
+			c.State, c.Summary = eval.Crit, "unexpected "+c.Summary
+		case t.Location != "" && !strings.HasPrefix(loc, t.Location):
+			c.State, c.Summary = eval.Crit, fmt.Sprintf("%s redirects to %q, not %s", resp.Status, clip(loc, 100), t.Location)
+		case t.Contains != "" && !bytes.Contains(body, []byte(t.Contains)):
+			c.State, c.Summary = eval.Crit, fmt.Sprintf("%s but the page lacks %q", resp.Status, t.Contains)
+		case t.Location != "":
+			c.Summary = fmt.Sprintf("%s to %s in %d ms", resp.Status, clip(loc, 100), rtt.Milliseconds())
 		}
 		out = append(out, c)
 	}
