@@ -37,7 +37,7 @@ auth_failures:
 
 # SSH logins. The office LAN is where the NAS is used from, so it is allowed.
 logins:
-  allow: ["OFFICE_LAN_CIDR"]
+  allow: ["192.168.68.0/22"]   # the office LAN (the NAS is 192.168.68.128/22)
   sources:
     - name: ssh
       cmd: ["journalctl", "-u", "sshd", "--since", "-24h", "--no-pager", "-o", "short-iso"]
