@@ -65,8 +65,7 @@ func New(srv *server.Server, who Whoiser) *Web {
 		"date":     func(t time.Time) string { return t.Local().Format("2006-01-02 15:04") },
 		"checkURL": checkURL,
 		"shortID":  shortID,
-		// checkName is a check's name on an endpoint's mini card: "bitlocker".
-		"checkName": func(host, id string) string { return strings.TrimPrefix(shortID(host, id), "endpoint.") },
+		"checkName": endpointCheckName,
 		"add":      func(a, b any) float64 { return num(a) + num(b) },
 		"sub":      func(a, b any) float64 { return num(a) - num(b) },
 		"half":     func(a any) float64 { return num(a) / 2 },
@@ -124,6 +123,16 @@ func checkURL(host, id string) string {
 // shortID drops the host name from a check id where the card already says which
 // host it is: "disk.monster-p4.root" -> "disk.root", "ts.online.jenkins" ->
 // "ts.online". The full id stays in the link and the title.
+// endpointCheckName is a check's name on an endpoint's mini card.
+func endpointCheckName(host, id string) string {
+	s := strings.TrimPrefix(shortID(host, id), "endpoint.")
+	if n, ok := map[string]string{"bitlocker": "BitLocker", "av": "Antivirus", "firewall": "Firewall",
+		"boot": "Secure Boot", "screenlock": "Screen lock", "os": "Windows", "os.security_updates": "Updates"}[s]; ok {
+		return n
+	}
+	return s
+}
+
 func shortID(host, id string) string {
 	if host == "" {
 		return id
@@ -547,7 +556,12 @@ func (t *tailnetView) markEndpoints(rows []rowView) {
 				continue
 			}
 			ds[i].State, ds[i].Href = r.State, r.Link
-			ds[i].Label, ds[i].Note, ds[i].Checks = r.Name, r.Note, r.Checks
+			ds[i].Label, ds[i].Note = r.Name, r.Note
+			for _, c := range r.Checks {
+				if c.ID != "report.fresh" { // the note already says when it reported
+					ds[i].Checks = append(ds[i].Checks, c)
+				}
+			}
 			worst := eval.OK
 			for _, c := range r.Checks {
 				if c.Effective != eval.OK && eval.Worst(worst, c.Effective) != worst {

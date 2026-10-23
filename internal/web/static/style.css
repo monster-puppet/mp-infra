@@ -937,7 +937,7 @@ pre.data {
   z-index: 20;
   left: 0;
   top: 100%;
-  width: min(360px, 90vw);
+  width: min(440px, 90vw);
   padding: 0.75rem 0.9rem;
   background: var(--card-bg);
   border: 1px solid var(--border);
@@ -953,12 +953,15 @@ pre.data {
 .mini-checks { list-style: none; margin: 0.5rem 0; font-size: 0.8rem; }
 .mini-checks li {
   display: grid;
-  grid-template-columns: auto 6.5rem minmax(0, 1fr);
-  gap: 0.5rem;
-  align-items: baseline;
-  padding: 0.15rem 0;
+  grid-template-columns: 0.65rem 6.5rem minmax(0, 1fr);
+  column-gap: 0.6rem;
+  align-items: start;
+  padding: 0.2rem 0;
+  line-height: 1.35;
 }
-.mini-name { color: var(--text-muted); }
+/* .dot sits in a named grid area on check rows; here it is just the first column. */
+.mini-checks .dot { grid-area: auto; margin-top: 0.3rem; }
+.mini-name { color: var(--text-muted); white-space: nowrap; }
 .mini-sum { color: var(--text); overflow-wrap: anywhere; }
 .device-more { font-size: 0.8rem; }
 
