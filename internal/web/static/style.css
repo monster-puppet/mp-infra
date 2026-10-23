@@ -1151,7 +1151,7 @@ pre.data {
   color: var(--text-muted);
 }
 
-/* One group per thing the map draws: lines, port chips, SSH icons. A group
+/* One group per thing the map draws: lines and port chips. A group
    wraps as a whole. */
 .lg-group { white-space: nowrap; }
 .lg-group > :first-child { margin-left: 0; }
@@ -1265,19 +1265,6 @@ pre.data {
 }
 
 .lg-chip-bad { background: var(--crit); border-color: var(--crit); color: var(--on-primary); }
-.map-legend .lg-auth {
-  display: inline-block;
-  width: 0.9rem;
-  height: 0.9rem;
-  margin: 0 0.3rem 0 0.6rem;
-  vertical-align: -0.15rem;
-  fill: none;
-  stroke-width: 2.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.lg-auth-key { stroke: var(--ok); }
-.lg-auth-pwd { stroke: var(--warn); }
 .lg-chip-closed { border-style: dashed; border-color: var(--warn); color: var(--warn); text-decoration: line-through; }
 
 /* History chart on a check page: one series, so no legend; the title names it. */
