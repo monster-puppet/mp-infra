@@ -49,6 +49,12 @@ Step-by-step for getting hosts to report: [`docs/setup.md`](docs/setup.md).
 Deployment (systemd unit, Windows scheduled task, Tailscale ACL) is in
 [`docs/deploy.md`](docs/deploy.md).
 
+To ship `main` to the server and every agent in [`deploy/hosts`](deploy/hosts),
+run `scripts/deploy.sh` from a clean, pushed checkout in a terminal (`-n` for a
+dry run, `--agents` to skip the server). It pushes over the existing ssh keys,
+checks each binary's sha256 on the host, never touches agent configs, and rolls
+a host back if the new agent fails `check` or its first report.
+
 Read-only MCP endpoint for Claude Code and other agents: [`docs/mcp.md`](docs/mcp.md).
 
 ## Building with Claude Code in the cloud

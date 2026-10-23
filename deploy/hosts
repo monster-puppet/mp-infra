@@ -1,0 +1,10 @@
+# Agents that scripts/deploy.sh updates. No secrets here: ssh targets are aliases
+# from the deploying machine's ~/.ssh/config, and the agent configs (with their
+# tokens) stay on each host and are never read or copied.
+#
+# name        ssh target    os       agent binary                          agent config
+monster-p4    monster-p4    linux    /usr/local/bin/mpinfra                /etc/mp-infra/agent.yaml
+jenkins       jenkins       linux    /usr/local/bin/mpinfra                /etc/mp-infra/agent.yaml
+p4-game       p4            linux    /usr/local/bin/mpinfra                /etc/mp-infra/agent.yaml
+nas           nas           dsm      /usr/local/mp-infra/mpinfra           /usr/local/mp-infra/agent.yaml
+jenkins-win   jenkins-win   windows  C:\ProgramData\mp-infra\mpinfra.exe   C:\ProgramData\mp-infra\agent.yaml
