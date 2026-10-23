@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 {{if .Refresh}}<noscript><meta http-equiv="refresh" content="60"></noscript>
-<script src="/static/app.js" defer></script>{{end}}
+<script src="/static/app.js?v={{urlquery .Version}}" defer></script>{{end}}
 <title>{{.Title}} · mp-infra</title>
 <link rel="icon" type="image/png" href="/static/images/favicon.png">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v={{urlquery .Version}}">
 </head>
 <body>
 <nav class="navbar">

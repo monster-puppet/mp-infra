@@ -58,7 +58,6 @@
     {{range .Nodes}}
     <a href="{{.Href}}" class="map-node node-{{.State}}{{if eq .FailedState "active"}} node-attacked{{end}}">
       <title>{{.Name}}: {{.State}}{{with .FailedTip}} · {{.}}{{end}}</title>
-      {{if and .OS (ne .FailedState "active")}}<g class="node-os" transform="translate({{add .X 98}} {{sub .Y 9}}) scale(0.75)">{{template "oslogo" .OS}}</g>{{end}}
       {{if .Failed}}
       <rect x="{{sub .X 135}}" y="{{sub .Y 30}}" width="270" height="60" rx="10" class="node-box"/>
       <circle cx="{{sub .X 113}}" cy="{{sub .Y 7}}" r="6" class="node-dot"/>
@@ -69,6 +68,7 @@
       <circle cx="{{sub .X 113}}" cy="{{.Y}}" r="6" class="node-dot"/>
       <text x="{{sub .X 98}}" y="{{add .Y 6}}" class="node-name">{{.Name}}</text>
       {{end}}
+      {{if and .OS (ne .FailedState "active")}}<g class="node-os" transform="translate({{add .X 98}} {{sub .Y 9}}) scale(0.75)">{{template "oslogo" .OS}}</g>{{end}}
       {{if eq .FailedState "active"}}{{template "attackicon" (badge (add .X 110) .Y)}}{{end}}
     </a>
     {{end}}
