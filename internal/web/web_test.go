@@ -423,7 +423,7 @@ func TestNetMap(t *testing.T) {
 }
 
 func TestNetMapSealed(t *testing.T) {
-	// Nothing open and nothing wrong: lock, and a faint line. A problem keeps the
+	// Nothing open and nothing wrong: lock, and no line. A problem keeps the
 	// line's colour and pulse even with nothing open.
 	hosts := []config.Host{{Name: "a", PublicIP: "192.0.2.1"}, {Name: "b", PublicIP: "192.0.2.2"}, {Name: "c", PublicIP: "192.0.2.3"}}
 	cv := func(host, id string, s eval.State, data string) checkView {

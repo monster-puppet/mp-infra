@@ -29,8 +29,8 @@ var (
 type mapLink struct {
 	On    bool   // the host is on this network
 	State string // ok, warn, crit, stale or none
-	// Sealed: an internet line with nothing open and nothing wrong. Drawn faint
-	// and still, so a healthy green line is not read as traffic getting through.
+	// Sealed: an internet line with nothing open and nothing wrong. Not drawn,
+	// only its lock, so a healthy green line is not read as traffic getting through.
 	Sealed bool
 	Title  string
 	Href  string

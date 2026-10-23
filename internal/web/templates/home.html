@@ -98,7 +98,7 @@
     {{end}}
   </svg>
   <p class="map-legend">
-    <span class="lg-group"><span class="lg lg-ok"></span>ok<span class="lg lg-warn"></span>warn<span class="lg lg-crit"></span>crit<span class="lg lg-stale"></span>stale<span class="lg lg-none"></span>no data<span class="lg lg-sealed"></span>nothing open</span>
+    <span class="lg-group"><span class="lg lg-ok"></span>ok<span class="lg lg-warn"></span>warn<span class="lg lg-crit"></span>crit<span class="lg lg-stale"></span>stale<span class="lg lg-none"></span>no data</span>
     <span class="lg-group"><span class="lg-chip">22</span>open<span class="lg-chip lg-chip-bad">8080</span>unexpected<span class="lg-chip lg-chip-closed">443</span>closed</span>
   </p>
 </section>
@@ -177,7 +177,7 @@
      bbox-relative filter region to nothing. */}}
 {{define "glow"}}<filter id="{{.ID}}" filterUnits="userSpaceOnUse" x="0" y="0" width="{{.W}}" height="{{.H}}"><feGaussianBlur in="SourceGraphic" stdDeviation="6" result="wide"/><feGaussianBlur in="SourceGraphic" stdDeviation="2" result="tight"/><feMerge><feMergeNode in="wide"/><feMergeNode in="wide"/><feMergeNode in="tight"/><feMergeNode in="SourceGraphic"/></feMerge></filter>{{end}}
 
-{{define "maplink"}}{{if .On}}<a href="{{or .Href "#"}}" class="map-link link-{{.State}}{{if .Sealed}} link-sealed{{end}}">{{with .Title}}<title>{{.}}</title>{{end}}<path d="{{.Path}}" class="link-hit"/><path d="{{.Path}}" class="link-line"/></a>{{end}}{{end}}
+{{define "maplink"}}{{if and .On (not .Sealed)}}<a href="{{or .Href "#"}}" class="map-link link-{{.State}}">{{with .Title}}<title>{{.}}</title>{{end}}<path d="{{.Path}}" class="link-hit"/><path d="{{.Path}}" class="link-line"/></a>{{end}}{{end}}
 
 {{/* A tailnet device on a 24-unit grid, drawn 26 across centred on X, Y, with
    its OS logo on the screen. */}}
