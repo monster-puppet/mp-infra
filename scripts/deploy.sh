@@ -110,7 +110,8 @@ SH
 deploy_unix() { # target bin cfg
   local target=$1 bin=$2 cfg=$3 sudo=sudo tty=
   if [ -n "$DRY" ]; then printf '  would copy %s, check sha256 %s, test, install to %s\n' "$LINUX_BIN" "${LINUX_SUM:0:12}" "$bin"; return 0; fi
-  [ "$(ssh "$target" 'id -u' | tr -d '\r')" = 0 ] && sudo= || tty=-t
+  # Last line only: a login profile may print first (p4-main's p4 login does).
+  [ "$(ssh "$target" 'id -u' | tr -d '\r' | tail -n 1)" = 0 ] && sudo= || tty=-t
   ssh "$target" 'mkdir -p -m 700 .mpinfra-deploy && cat > .mpinfra-deploy/step.sh' <<<"$STEP_SH"
   scp -q "$LINUX_BIN" "$target:.mpinfra-deploy/mpinfra.new"
   local rc=0
@@ -129,6 +130,7 @@ deploy_windows() { # target bin cfg
 # Not 'Stop': in PowerShell 5.1 a native program's stderr would then throw.
 # File operations that must not half-fail carry -ErrorAction Stop instead.
 \$ErrorActionPreference = 'Continue'
+\$ProgressPreference = 'SilentlyContinue'   # else ssh shows CLIXML progress records
 \$bin = '$bin'; \$cfg = '$cfg'; \$staged = '$dir\\mpinfra.staged.exe'
 if ((Get-FileHash \$staged -Algorithm SHA256).Hash -ne '$WIN_SUM'.ToUpper()) { Remove-Item \$staged; 'sha256 mismatch: not installed'; exit 3 }
 & \$staged check -config \$cfg *> \$null
