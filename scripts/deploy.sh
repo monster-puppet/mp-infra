@@ -51,13 +51,15 @@ VERSION=$(git describe --tags --always --dirty)
 echo "shipping $VERSION"
 
 say "Testing and building"
-make -s check >/dev/null || die "make check failed"
-make -s dist >/dev/null
+# What `make check` and `make dist` do, without needing make (none on Windows).
+go vet ./... && GOOS=windows GOARCH=amd64 go vet ./... && go test ./... >/dev/null || die "vet or tests failed"
+LDFLAGS="-s -w -X main.version=$VERSION"
 LINUX_BIN=dist/mpinfra-linux-amd64
 WIN_BIN=dist/mpinfra-windows-amd64.exe
-sum() { grep " ${1##*/}\$" dist/SHA256SUMS | cut -d' ' -f1; }
-LINUX_SUM=$(sum "$LINUX_BIN") WIN_SUM=$(sum "$WIN_BIN")
-[ -n "$LINUX_SUM" ] && [ -n "$WIN_SUM" ] || die "make dist did not write both checksums"
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$LDFLAGS" -o "$LINUX_BIN" ./cmd/mpinfra
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$LDFLAGS" -o "$WIN_BIN" ./cmd/mpinfra
+sha() { sha256sum "$1" | cut -d' ' -f1; }
+LINUX_SUM=$(sha "$LINUX_BIN") WIN_SUM=$(sha "$WIN_BIN")
 
 # --- server first, so it already knows any new report fields ---
 if [ -n "$SERVER" ]; then
