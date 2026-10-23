@@ -30,7 +30,7 @@ type mapLink struct {
 	On    bool   // the host is on this network
 	State string // ok, warn, crit, stale or none
 	// Sealed: an internet line with nothing open and nothing wrong. Not drawn,
-	// only its lock, so a healthy green line is not read as traffic getting through.
+	// and no badges, so a healthy green line is not read as traffic getting through.
 	Sealed bool
 	Title  string
 	Href  string
@@ -294,7 +294,7 @@ const authW = 14.0
 // wideBadges lays out the line's badges in a row centred on (x, y): the alert
 // first, then one chip per port.
 func (l mapLink) wideBadges(x, y float64) []mapBadge {
-	if !l.On {
+	if !l.On || l.Sealed {
 		return nil
 	}
 	var bs []mapBadge
@@ -341,7 +341,7 @@ func (l mapLink) wideBadges(x, y float64) []mapBadge {
 
 // narrowBadge sums the line up in one badge for the phone layout.
 func (l mapLink) narrowBadge(x, y float64) []mapBadge {
-	if !l.On {
+	if !l.On || l.Sealed {
 		return nil
 	}
 	b := mapBadge{X: x, Y: y, W: iconW, Icon: l.Icon, Class: l.State, Title: l.Title, Href: l.Href}

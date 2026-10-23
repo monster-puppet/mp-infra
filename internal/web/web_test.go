@@ -423,7 +423,7 @@ func TestNetMap(t *testing.T) {
 }
 
 func TestNetMapSealed(t *testing.T) {
-	// Nothing open and nothing wrong: lock, and no line. A problem keeps the
+	// Nothing open and nothing wrong: no line and no badges. A problem keeps the
 	// line's colour and pulse even with nothing open.
 	hosts := []config.Host{{Name: "a", PublicIP: "192.0.2.1"}, {Name: "b", PublicIP: "192.0.2.2"}, {Name: "c", PublicIP: "192.0.2.3"}}
 	cv := func(host, id string, s eval.State, data string) checkView {
@@ -436,7 +436,7 @@ func TestNetMapSealed(t *testing.T) {
 		cv("c", "ports.public.c", eval.OK, `{"open":[22],"expected":[22]}`),
 	}
 	m := buildMap(hosts, nil, nil, all, nil)
-	if l := m.Nodes[0].Internet; l.Icon != "lock" || !l.Sealed {
+	if l := m.Nodes[0].Internet; !l.Sealed || len(l.Badges) > 0 || len(m.Narrow[0].Internet.Badges) > 0 {
 		t.Errorf("a: %+v", l)
 	}
 	if l := m.Nodes[1].Internet; l.Sealed || l.State != "warn" {
