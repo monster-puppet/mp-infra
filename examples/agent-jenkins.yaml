@@ -36,4 +36,7 @@ listeners: true
 
 # sec.fail2ban: is fail2ban running with an sshd jail; banned now and new bans in
 # 24 h, summed in the internet bubble of the network map. Needs root.
-fail2ban: {}
+# unban: true lets an admin unban an address from the UI (/unban): the server's
+# reply to a report names it, and the agent runs `fail2ban-client unban <ip>`. It
+# is the one thing the agent changes on the host; leave it out to keep it read-only.
+fail2ban: {unban: true}

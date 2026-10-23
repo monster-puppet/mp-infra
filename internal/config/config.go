@@ -62,6 +62,23 @@ type Server struct {
 	// GoogleLogin, when client_id is set, puts the UI behind Google sign-in on top
 	// of the tailnet. /healthz and /api/status.json stay open on the tailnet.
 	GoogleLogin GoogleLogin `yaml:"google_login"`
+	// Admins may unban an IP from the UI (/unban): Tailscale login names, or
+	// Google accounts when google_login is on. Empty: nobody, the feature is off.
+	Admins []string `yaml:"admins"`
+}
+
+// IsAdmin reports whether viewer is listed under admins. An entry must look like
+// a login (name@domain), so the "local" or bare-address viewer never matches.
+func (c *Server) IsAdmin(viewer string) bool {
+	if !strings.Contains(viewer, "@") {
+		return false
+	}
+	for _, a := range c.Admins {
+		if strings.EqualFold(a, viewer) {
+			return true
+		}
+	}
+	return false
 }
 
 // GoogleLogin configures Google (OpenID Connect) sign-in for the UI. The redirect
@@ -338,6 +355,11 @@ func LoadServer(path string) (*Server, error) {
 		seen[h.Name] = true
 		if err := CheckHostMeta(h.Label, h.OS); err != nil {
 			return nil, fmt.Errorf("%s: host %s: %w", path, h.Name, err)
+		}
+	}
+	for _, a := range c.Admins {
+		if strings.TrimSpace(a) != a || !strings.Contains(a, "@") {
+			return nil, fmt.Errorf("%s: admins: %q is not a login (name@domain)", path, a)
 		}
 	}
 	for i, l := range c.Links {
@@ -666,12 +688,20 @@ type Agent struct {
 	SMART           *SMART         `yaml:"smart"`     // smart.<host>: drive health from smartctl
 	Fail2ban        *Fail2ban      `yaml:"fail2ban"`  // sec.fail2ban.<host>: running, banned now, bans in 24 h
 	Windows         *WindowsChecks `yaml:"windows"`
+
+	// Path is the file this config was loaded from; the agent keeps its unban
+	// results next to it.
+	Path string `yaml:"-"`
 }
 
 // Fail2ban reads fail2ban's state; `fail2ban: {}` takes the defaults.
 type Fail2ban struct {
 	Client []string `yaml:"client"` // default ["fail2ban-client"]
 	Log    string   `yaml:"log"`    // default /var/log/fail2ban.log
+	// Unban lets the server's reply to a report name addresses to unban, which
+	// the agent does with `<client> unban <ip>`. Off unless set: it is the only
+	// thing the agent changes on its host (docs/spec.md §1).
+	Unban bool `yaml:"unban"`
 }
 
 // RAID reads the Linux md arrays (Synology SHR and RAID are md arrays too).
@@ -762,6 +792,7 @@ func LoadAgent(path string) (*Agent, error) {
 	if !HostName.MatchString(c.Host) {
 		return nil, fmt.Errorf("%s: invalid host %q", path, c.Host)
 	}
+	c.Path = path
 	if c.ServerURL != "" {
 		u, err := url.Parse(c.ServerURL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {

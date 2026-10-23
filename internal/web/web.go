@@ -74,8 +74,12 @@ func New(srv *server.Server, who Whoiser) *Web {
 		"pathEsc":  url.PathEscape,
 		"label":    w.label,
 		"osName":   func(os string) string { return config.OSNames[os] },
+		// The badge colour of an unban row's state (store.Unban.State).
+		"unbanClass": func(state string) string {
+			return map[string]string{"waiting": "new", "sent": "warn", "done": "ok", "failed": "crit", "expired": "stale"}[state]
+		},
 	}
-	for _, page := range []string{"home", "check", "history", "error", "signin", "host"} {
+	for _, page := range []string{"home", "check", "history", "error", "signin", "host", "unban"} {
 		w.pages[page] = template.Must(template.New("layout.html").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", "templates/"+page+".html"))
 	}
 	return w
@@ -162,6 +166,8 @@ func (w *Web) UI() http.Handler {
 	mux.HandleFunc("GET /history", w.history)
 	mux.HandleFunc("GET /host/{host}", w.hostPage)
 	mux.HandleFunc("POST /host/{host}", w.sameOrigin(w.saveHost))
+	mux.HandleFunc("GET /unban", w.unbanPage)
+	mux.HandleFunc("POST /unban", w.sameOrigin(w.unban))
 	if len(w.mcpTokens) > 0 {
 		mux.HandleFunc(MCPPath, w.mcp)
 	}
@@ -337,8 +343,27 @@ func (w *Web) report(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("ingest %s: %v", host, err)
 		http.Error(rw, "internal error", http.StatusInternalServerError)
 	default:
-		rw.WriteHeader(http.StatusNoContent)
+		w.reportReply(rw, r, host, endpoint)
 	}
+}
+
+// reportReply answers a stored report: 204, or 200 with the addresses waiting
+// to be unbanned on this host (see server.TakeUnbans).
+func (w *Web) reportReply(rw http.ResponseWriter, r *http.Request, host string, endpoint bool) {
+	var ips []string
+	if !endpoint {
+		var err error
+		if ips, err = w.srv.TakeUnbans(r.Context(), host); err != nil {
+			log.Printf("unbans for %s: %v", host, err)
+		}
+	}
+	if len(ips) == 0 {
+		rw.WriteHeader(http.StatusNoContent)
+		return
+	}
+	log.Printf("unban sent to %s: %s", host, strings.Join(ips, " "))
+	rw.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(rw).Encode(report.Reply{Unban: ips})
 }
 
 // --- pages ---
@@ -1008,4 +1033,82 @@ type noWhois struct{}
 func (noWhois) Whois(_ context.Context, remoteAddr string) string {
 	host, _, _ := net.SplitHostPort(remoteAddr)
 	return host
+}
+
+// --- unban ---
+
+type unbanData struct {
+	Enabled  bool // admins are configured
+	Admin    bool // the viewer may unban
+	Hosts    []string
+	IP       string   // the address looked up (?ip=)
+	BannedOn []string // hosts whose latest report lists IP as banned
+	Requests []unbanRequest
+	Flash    string
+}
+
+// unbanRequest is one request: one address, by one viewer at one time, on
+// every host that accepted unbans then.
+type unbanRequest struct {
+	IP, By string
+	At     time.Time
+	Hosts  []store.Unban
+}
+
+func (w *Web) unbanPage(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	d := unbanData{Enabled: len(w.srv.Cfg.Admins) > 0, Admin: w.srv.Cfg.IsAdmin(viewer(r)), Flash: r.URL.Query().Get("msg")}
+	hosts, banned, err := w.srv.UnbanHosts(ctx)
+	if err != nil {
+		w.fail(rw, r, 500, err.Error())
+		return
+	}
+	d.Hosts = hosts
+	if ip := strings.TrimSpace(r.URL.Query().Get("ip")); ip != "" {
+		a, err := report.ParseUnbanIP(ip)
+		if err != nil {
+			d.Flash = err.Error()
+		} else {
+			d.IP = a.String()
+			for _, h := range w.srv.Cfg.Hosts {
+				for _, b := range banned[h.Name] {
+					if b == d.IP {
+						d.BannedOn = append(d.BannedOn, h.Name)
+						break
+					}
+				}
+			}
+		}
+	}
+	rows, err := w.srv.Unbans(ctx, 50)
+	if err != nil {
+		w.fail(rw, r, 500, err.Error())
+		return
+	}
+	for _, u := range rows {
+		n := len(d.Requests)
+		if n == 0 || d.Requests[n-1].IP != u.IP || d.Requests[n-1].By != u.RequestedBy || !d.Requests[n-1].At.Equal(u.RequestedAt) {
+			d.Requests = append(d.Requests, unbanRequest{IP: u.IP, By: u.RequestedBy, At: u.RequestedAt})
+			n++
+		}
+		d.Requests[n-1].Hosts = append(d.Requests[n-1].Hosts, u)
+	}
+	w.render(rw, r, "unban", 200, page{Title: "Unban an IP", Section: "home", Data: d})
+}
+
+func (w *Web) unban(rw http.ResponseWriter, r *http.Request) {
+	if !w.srv.Cfg.IsAdmin(viewer(r)) {
+		log.Printf("unban refused for %q: not an admin", viewer(r))
+		w.fail(rw, r, http.StatusForbidden, "Only admins can unban an address.")
+		return
+	}
+	ip := strings.TrimSpace(r.FormValue("ip"))
+	hosts, err := w.srv.RequestUnban(r.Context(), ip, viewer(r))
+	if err != nil {
+		http.Redirect(rw, r, "/unban?msg="+url.QueryEscape("Not queued: "+err.Error()), http.StatusSeeOther)
+		return
+	}
+	a, _ := report.ParseUnbanIP(ip)
+	log.Printf("unban %s on %s requested by %q", a, strings.Join(hosts, ", "), viewer(r))
+	http.Redirect(rw, r, "/unban?ip="+url.QueryEscape(a.String()), http.StatusSeeOther)
 }

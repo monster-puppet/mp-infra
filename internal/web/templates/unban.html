@@ -1,0 +1,63 @@
+{{define "content"}}{{with .Data}}
+<p class="crumbs"><a href="/">Status</a> / Unban</p>
+<h1 class="page-title">Unban an IP</h1>
+{{if .Flash}}<p class="status status-warn">{{.Flash}}</p>{{end}}
+<section class="card">
+  <h2>Unban</h2>
+  {{if not .Enabled}}
+  <p class="help">Unbanning is off: the server config lists no <span class="mono">admins</span>.</p>
+  {{else if not .Admin}}
+  <p class="help">Only admins can unban an address. You can still look up where it is banned below.</p>
+  {{else if not .Hosts}}
+  <p class="help">No host accepts unbans yet. A host does once its agent.yaml has <span class="mono">fail2ban: {unban: true}</span> and it has reported.</p>
+  {{else}}
+  <form method="post" action="/unban" class="ack-form">
+    <div class="form-group grow">
+      <label for="unban-ip">IP address</label>
+      <input id="unban-ip" name="ip" required maxlength="64" value="{{.IP}}" placeholder="203.0.113.7" autocomplete="off" spellcheck="false">
+    </div>
+    <button class="btn btn-primary" type="submit">Unban on all hosts</button>
+  </form>
+  <p class="help">Unbans the address in fail2ban on {{range $i, $h := .Hosts}}{{if $i}}, {{end}}{{label $h}}{{end}}. Each host does it after its next report, within about 5 minutes, and says whether it worked in the report after that. A request waits an hour at most. fail2ban keeps its history: if the address fails again, its next ban is longer.</p>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>Currently banned on</h2>
+  <form method="get" action="/unban" class="filter">
+    <div class="form-group grow">
+      <label for="lookup-ip">IP address</label>
+      <input id="lookup-ip" name="ip" maxlength="64" value="{{.IP}}" placeholder="203.0.113.7" autocomplete="off" spellcheck="false">
+    </div>
+    <button class="btn" type="submit">Look up</button>
+  </form>
+  {{if .IP}}
+  {{if .BannedOn}}<p><span class="mono">{{.IP}}</span> is banned on {{range $i, $h := .BannedOn}}{{if $i}}, {{end}}{{label $h}}{{end}}, as of each host's latest report.</p>
+  {{else}}<p class="empty"><span class="mono">{{.IP}}</span> is not banned on any host that reports fail2ban, as of their latest reports.</p>{{end}}
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>Recent requests</h2>
+  <p class="help">The last 50 unban requests and how each host handled them.</p>
+  {{if .Requests}}
+  <div class="table-scroll">
+  <table class="report-table">
+    <thead><tr><th>When</th><th>IP</th><th>By</th><th>Hosts</th></tr></thead>
+    <tbody>
+    {{range .Requests}}
+      <tr>
+        <td class="nowrap">{{date .At}}</td>
+        <td class="mono">{{.IP}}</td>
+        <td>{{.By}}</td>
+        <td>{{range .Hosts}}<div>{{label .Host}} <span class="badge badge-{{unbanClass .State}}">{{.State}}</span>{{with .Msg}} <span class="muted">{{.}}</span>{{end}}</div>{{end}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}
+  <p class="empty">No unban requests yet.</p>
+  {{end}}
+</section>
+{{end}}{{end}}

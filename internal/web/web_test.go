@@ -542,19 +542,28 @@ func TestNetMapDevices(t *testing.T) {
 	}
 }
 
-func TestNetMapFailed4h(t *testing.T) {
+func TestNetMapFailed(t *testing.T) {
 	hosts := []config.Host{{Name: "a"}, {Name: "b"}}
 	cv := func(host, data string) checkView {
 		return checkView{Check: store.Check{Host: host, ID: "auth.failures." + host, Data: data}, Effective: eval.OK}
 	}
-	m := buildMap(hosts, nil, nil, []checkView{cv("a", `{"total":10000,"last_4h":1200}`), cv("b", `{"total":984,"last_4h":3}`)}, nil)
-	if m.Failed != "10,984" || m.Failed4h != "1,203" {
-		t.Errorf("both timed: %q %q", m.Failed, m.Failed4h)
+	// The bubble shows the 24 h total only; last_4h stays in the check data.
+	m := buildMap(hosts, nil, nil, []checkView{cv("a", `{"total":10000,"last_4h":1200}`), cv("b", `{"total":984}`)}, nil)
+	if m.Failed != "10,984" {
+		t.Errorf("failed: %q", m.Failed)
 	}
-	// b's agent has no timestamps yet: no 4 h figure rather than a short one.
-	m = buildMap(hosts, nil, nil, []checkView{cv("a", `{"total":10000,"last_4h":1200}`), cv("b", `{"total":984}`)}, nil)
-	if m.Failed != "10,984" || m.Failed4h != "" {
-		t.Errorf("one untimed: %q %q", m.Failed, m.Failed4h)
+
+	e := setup(t)
+	rep := fmt.Sprintf(`{"host":"jenkins","agent_version":"1","collected_at":%q,"checks":[`+
+		`{"id":"auth.failures.jenkins","state":"ok","summary":"5 failed","data":{"total":5,"last_4h":2}}]}`, e.clock.Format(time.RFC3339))
+	if rec := e.post("tok-jenkins", rep); rec.Code != http.StatusNoContent {
+		t.Fatalf("post: %d %s", rec.Code, rec.Body)
+	}
+	if h := e.get("/").Body.String(); !strings.Contains(h, ">last 24 h<") || strings.Contains(h, "last 4 h") || strings.Contains(h, "/ 4 h") {
+		t.Errorf("home: the bubble should show the 24 h count and nothing over 4 h")
+	}
+	if p := e.get("/check/jenkins/auth.failures.jenkins").Body.String(); !strings.Contains(p, `&#34;last_4h&#34;: 2`) {
+		t.Errorf("check page lost last_4h")
 	}
 }
 
@@ -571,8 +580,8 @@ func TestNetMapFail2ban(t *testing.T) {
 		cv("c", "ports.public.c", eval.OK, `{"open":[22],"expected":[22]}`),
 	}
 	m := buildMap(hosts, nil, nil, all, nil)
-	if m.Banned != "1,050" || m.Bans24h != "15" || !strings.Contains(m.BannedTitle, "a: 1,041 banned, 12 new in 24 h") {
-		t.Errorf("totals: %q %q %q", m.Banned, m.Bans24h, m.BannedTitle)
+	if m.Banned != "1,050" || !strings.Contains(m.BannedTitle, "a: 1,041 banned now") || strings.Contains(m.BannedTitle, "24 h") {
+		t.Errorf("totals: %q %q", m.Banned, m.BannedTitle)
 	}
 	// The shield appears only where fail2ban is not ok, and colours the line.
 	if m.Nodes[0].Internet.Shield != nil || m.Nodes[1].Internet.Shield != nil {
@@ -598,8 +607,144 @@ func TestNetMapFail2ban(t *testing.T) {
 	if rec := e.post("tok-jenkins", rep); rec.Code != http.StatusNoContent {
 		t.Fatalf("post: %d %s", rec.Code, rec.Body)
 	}
-	if h := e.get("/").Body.String(); !strings.Contains(h, ">banned now<") || !strings.Contains(h, ">+7 in 24 h<") || !strings.Contains(h, ">49<") {
+	h := e.get("/").Body.String()
+	if !strings.Contains(h, ">banned now<") || !strings.Contains(h, ">49<") {
 		t.Errorf("home lacks the banned block")
+	}
+	if strings.Contains(h, "in 24 h<") || strings.Contains(h, "+7") {
+		t.Errorf("home still shows the bans in 24 h")
+	}
+	if strings.Count(h, `<a href="/unban" class="inet-unban">`) != 2 {
+		t.Errorf("home lacks the unban link in both layouts")
+	}
+	if p := e.get("/check/jenkins/sec.fail2ban.jenkins").Body.String(); !strings.Contains(p, `&#34;bans_24h&#34;: 7`) {
+		t.Errorf("check page lost bans_24h")
+	}
+}
+
+// fixedWho names every viewer the same, like the Tailscale whois would.
+type fixedWho string
+
+func (f fixedWho) Whois(context.Context, string) string { return string(f) }
+
+func TestUnbanFlow(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	e.srv.Cfg.Admins = []string{"admin@example.com"}
+	admin := New(e.srv, fixedWho("admin@example.com")).UI()
+	same := map[string]string{"Sec-Fetch-Site": "same-origin"}
+	f2b := func(host string, unban bool, extra string) string {
+		*e.clock = e.clock.Add(time.Minute)
+		return fmt.Sprintf(`{"host":%q,"agent_version":"1","collected_at":%q,"checks":[`+
+			`{"id":"sec.fail2ban.%s","state":"ok","summary":"x","data":{"running":true,"banned_now":1,"unban":%v,"banned_ips":["203.0.113.7"]%s}}]}`,
+			host, e.clock.Format(time.RFC3339), host, unban, extra)
+	}
+	rows := func() []store.Unban {
+		us, err := e.srv.Store.Unbans(ctx, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return us
+	}
+	post := func(ui http.Handler, ip string, h map[string]string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		ui.ServeHTTP(rec, form("/unban", url.Values{"ip": {ip}}, h))
+		return rec
+	}
+	// jenkins allows unbans, monster-p4 does not; both have the address banned
+	// (listed in config order).
+	for host, on := range map[string]bool{"jenkins": true, "monster-p4": false} {
+		if rec := e.post("tok-"+host, f2b(host, on, "")); rec.Code != http.StatusNoContent {
+			t.Fatalf("%s: %d %s", host, rec.Code, rec.Body)
+		}
+	}
+	page := e.get("/unban?ip=203.0.113.7").Body.String()
+	if !strings.Contains(page, "is banned on monster-p4, jenkins") || strings.Contains(page, `method="post" action="/unban"`) {
+		t.Errorf("viewer page: banned-on list missing, or the unban form shown to a non-admin")
+	}
+
+	// A viewer who is not an admin, and cross-site or header-less posts, are refused.
+	if rec := post(e.ui, "203.0.113.7", same); rec.Code != http.StatusForbidden {
+		t.Errorf("non-admin: %d", rec.Code)
+	}
+	for _, h := range []map[string]string{nil, {"Sec-Fetch-Site": "cross-site"}, {"Origin": "http://evil.example"}} {
+		if rec := post(admin, "203.0.113.7", h); rec.Code != http.StatusForbidden {
+			t.Errorf("admin, headers %v: %d", h, rec.Code)
+		}
+	}
+	// Anything but a plain address is refused.
+	for _, bad := range []string{"203.0.113.7; rm -rf /", "203.0.113.0/24", "example.com", "fe80::1%eth0"} {
+		if rec := post(admin, bad, same); rec.Code != http.StatusSeeOther || !strings.Contains(rec.Header().Get("Location"), "Not+queued") {
+			t.Errorf("%q: %d %s", bad, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+	if len(rows()) != 0 {
+		t.Fatalf("refused requests queued rows: %+v", rows())
+	}
+	if p := e.get("/unban").Body.String(); !strings.Contains(p, "Only admins") {
+		t.Errorf("non-admin page lacks the note")
+	}
+	rec := httptest.NewRecorder()
+	admin.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/unban", nil))
+	if !strings.Contains(rec.Body.String(), `method="post" action="/unban"`) {
+		t.Errorf("admin page lacks the form")
+	}
+
+	// The admin's request queues the address on jenkins only.
+	if rec := post(admin, "203.0.113.7", same); rec.Code != http.StatusSeeOther {
+		t.Fatalf("admin: %d %s", rec.Code, rec.Body)
+	}
+	if us := rows(); len(us) != 1 || us[0].Host != "jenkins" || us[0].RequestedBy != "admin@example.com" || us[0].State() != "waiting" {
+		t.Fatalf("rows: %+v", us)
+	}
+	// monster-p4's report gets nothing; jenkins's gets the address once.
+	if rec := e.post("tok-monster-p4", f2b("monster-p4", false, "")); rec.Code != http.StatusNoContent {
+		t.Errorf("monster-p4: %d", rec.Code)
+	}
+	rec = e.post("tok-jenkins", f2b("jenkins", true, ""))
+	if rec.Code != 200 || rec.Header().Get("Content-Type") != "application/json" || strings.TrimSpace(rec.Body.String()) != `{"unban":["203.0.113.7"]}` {
+		t.Fatalf("jenkins: %d %q %s", rec.Code, rec.Header().Get("Content-Type"), rec.Body)
+	}
+	if us := rows(); us[0].State() != "sent" {
+		t.Errorf("after delivery: %s", us[0].State())
+	}
+	// monster-p4 cannot finish jenkins's row.
+	res := `,"unban_results":[{"ip":"203.0.113.7","ok":true,"msg":"1"}]`
+	if rec := e.post("tok-monster-p4", f2b("monster-p4", false, res)); rec.Code != http.StatusNoContent {
+		t.Errorf("monster-p4 results: %d", rec.Code)
+	}
+	if us := rows(); us[0].State() != "sent" {
+		t.Errorf("another host's result touched the row: %s", us[0].State())
+	}
+	// jenkins's next report carries the result: done, and nothing more to send.
+	if rec := e.post("tok-jenkins", f2b("jenkins", true, res)); rec.Code != http.StatusNoContent {
+		t.Errorf("jenkins results: %d %s", rec.Code, rec.Body)
+	}
+	if us := rows(); us[0].State() != "done" || us[0].Msg != "1" {
+		t.Errorf("after the result: %+v", us[0])
+	}
+	if p := e.get("/unban").Body.String(); !strings.Contains(p, "203.0.113.7") || !strings.Contains(p, `badge-ok">done<`) || !strings.Contains(p, "admin@example.com") {
+		t.Errorf("page lacks the request")
+	}
+
+	// A request that waits more than an hour expires instead of being sent.
+	post(admin, "2001:db8::7", same)
+	*e.clock = e.clock.Add(2 * time.Hour)
+	if rec := e.post("tok-jenkins", f2b("jenkins", true, "")); rec.Code != http.StatusNoContent {
+		t.Errorf("expired: %d %s", rec.Code, rec.Body)
+	}
+	if us := rows(); us[0].IP != "2001:db8::7" || us[0].State() != "expired" {
+		t.Errorf("expiry: %+v", us[0])
+	}
+
+	// No admins: the feature is off, even for rows already queued.
+	post(admin, "198.51.100.9", same)
+	e.srv.Cfg.Admins = nil
+	if rec := e.post("tok-jenkins", f2b("jenkins", true, "")); rec.Code != http.StatusNoContent {
+		t.Errorf("admins removed: %d", rec.Code)
+	}
+	if p := e.get("/unban").Body.String(); !strings.Contains(p, "Unbanning is off") {
+		t.Errorf("page does not say the feature is off")
 	}
 }
 

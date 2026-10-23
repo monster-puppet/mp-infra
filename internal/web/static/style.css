@@ -1064,6 +1064,15 @@ pre.data {
   fill: var(--text-muted);
 }
 
+/* "Unban an IP" under the fail2ban count. */
+.bubble-link {
+  fill: var(--accent);
+  text-decoration: underline;
+}
+
+.inet-unban:hover .bubble-link,
+.inet-unban:focus .bubble-link { fill: var(--primary); }
+
 .globe {
   fill: none;
   stroke: var(--text-strong);

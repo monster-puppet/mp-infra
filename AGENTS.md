@@ -14,9 +14,12 @@ Code Review), jenkins, the Windows build agent, and later p4-game. One Go binary
 1. **No secrets in the repo.** Not in code, config examples, fixtures, tests or commit
    messages. Tokens come from env vars named in config. Fixture output must have real
    IPs, hostnames of third parties and usernames replaced by placeholders.
-2. **Read-only.** Collectors and probes never change anything on a host. The single
-   exception is the monthly `ACTION=status` build of the break-glass Jenkins job, which
-   is itself read-only.
+2. **Read-only.** Collectors and probes never change anything on a host. The
+   exceptions are the monthly `ACTION=status` build of the break-glass Jenkins job, which
+   is itself read-only, and **unban** (spec §1): only on a host whose `agent.yaml` has
+   `fail2ban: {unban: true}`, only addresses that parse as a plain IP, at most 20 per
+   reply, only the fixed argv `<client> unban <ip>` without a shell. Never widen it to
+   other commands or arguments.
 3. **Tailnet only.** Never add a code path that serves the UI on a public interface by
    default. Keep the UI port and the report port separate.
 4. **Untrusted reports.** Treat everything in a report body as hostile input: size-limit

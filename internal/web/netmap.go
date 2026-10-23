@@ -128,13 +128,10 @@ type mapView struct {
 	// worst host's count (active during a brute force).
 	Failed      string
 	FailedClass string
-	// Failed4h is the same over the last 4 h, "" unless every host that counts
-	// failed logins also reports a 4 h count.
-	Failed4h string
 	// Banned is the number of addresses fail2ban bans now across all hosts that
-	// report sec.fail2ban, Bans24h the new bans in 24 h; both "" when none report.
-	// BannedTitle breaks them down per host for the tooltip.
-	Banned, Bans24h, BannedTitle string
+	// report sec.fail2ban, "" when none report. BannedTitle breaks it down per
+	// host for the tooltip.
+	Banned, BannedTitle string
 	// Wide layout: networks left and right of a host column.
 	W, H float64
 	// Narrow layout (phones): networks above and below a row of hosts.
@@ -420,8 +417,8 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 		state[r.Host] = r.State
 	}
 	m := &mapView{}
-	failed, recent, timed := 0, 0, true
-	banned, bans, banHosts := 0, 0, []string{}
+	failed := 0
+	banned, banHosts := 0, []string{}
 	for _, h := range hosts {
 		if h.Endpoint {
 			continue // a workstation: drawn as a device in the tailnet bubble
@@ -439,12 +436,10 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 					var d struct {
 						Running   bool `json:"running"`
 						BannedNow int  `json:"banned_now"`
-						Bans24h   int  `json:"bans_24h"`
 					}
-					if json.Unmarshal([]byte(c.Data), &d) == nil && d.Running && d.BannedNow >= 0 && d.Bans24h >= 0 {
+					if json.Unmarshal([]byte(c.Data), &d) == nil && d.Running && d.BannedNow >= 0 {
 						banned += d.BannedNow
-						bans += d.Bans24h
-						banHosts = append(banHosts, fmt.Sprintf("%s: %s banned, %s new in 24 h", nd.Name, thousands(d.BannedNow), thousands(d.Bans24h)))
+						banHosts = append(banHosts, fmt.Sprintf("%s: %s banned now", nd.Name, thousands(d.BannedNow)))
 					}
 				}
 				if strings.HasPrefix(c.ID, "auth.failures.") {
@@ -453,17 +448,11 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 						Top   []struct {
 							IP string `json:"ip"`
 						} `json:"top_ips"`
-						Last4h   *int   `json:"last_4h"`
 						Active   bool   `json:"active"`
 						Recent   int    `json:"recent"`
 						RecentIP string `json:"recent_ip"`
 					}
 					err := json.Unmarshal([]byte(c.Data), &d)
-					if err == nil && d.Last4h != nil {
-						recent += *d.Last4h
-					} else {
-						timed = false
-					}
 					switch {
 					case err != nil:
 					case d.Active:
@@ -514,9 +503,6 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 	}
 	if failed > 0 {
 		m.Failed = thousands(failed)
-		if timed {
-			m.Failed4h = thousands(recent)
-		}
 		rank := map[string]int{"warn": 1, "crit": 2, "active": 3}
 		for _, nd := range m.Nodes {
 			if nd.Failed != "" && (m.FailedClass == "" || rank[nd.FailedState] > rank[m.FailedClass]) {
@@ -525,7 +511,7 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 		}
 	}
 	if len(banHosts) > 0 {
-		m.Banned, m.Bans24h = thousands(banned), thousands(bans)
+		m.Banned = thousands(banned)
 		m.BannedTitle = "fail2ban\n" + strings.Join(banHosts, "\n")
 	}
 	m.Links = hostLinks(m.Nodes, links, all)

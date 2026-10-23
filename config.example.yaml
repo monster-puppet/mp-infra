@@ -183,3 +183,10 @@ mcp_tokens_env: MPINFRA_MCP_TOKENS
 #   allowed_domain: "EXAMPLE_DOMAIN"         # Google Workspace domain (hd claim)
 #   allowed_emails: []                       # extra accounts outside the domain
 #   session_ttl: 168h
+
+# Who may unban an IP from the UI (/unban, "Unban an IP" in the network map's
+# internet bubble): Tailscale login names, or Google accounts when google_login is
+# on. Each host acts only if its agent.yaml has fail2ban: {unban: true}. Empty or
+# missing: nobody can, and the feature is off.
+# admins:
+#   - "ADMIN@EXAMPLE_DOMAIN"

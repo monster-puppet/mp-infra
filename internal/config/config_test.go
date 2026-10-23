@@ -64,6 +64,10 @@ func TestLoadServerRejects(t *testing.T) {
 		"notices: {feeds: [{name: a, url: 'ftp://x', state: warn}]}",
 		"notices: {feeds: [{name: a, url: 'https://x', state: warn, title: '('}]}",
 		"notices: {feeds: [{name: a, url: 'https://x', state: warn}, {name: a, url: 'https://y', state: crit}]}",
+		// admins: must be logins, so the "local" or address viewer never matches
+		"admins: [local]",
+		"admins: ['100.64.0.1']",
+		"admins: [' marcus@example.com']",
 	} {
 		if _, err := LoadServer(write(t, body)); err == nil {
 			t.Errorf("LoadServer(%q) = nil error", body)
@@ -188,8 +192,31 @@ func TestLoadAgentExamples(t *testing.T) {
 		t.Fatal("no examples")
 	}
 	for _, p := range paths {
-		if _, err := LoadAgent(p); err != nil {
+		c, err := LoadAgent(p)
+		if err != nil {
 			t.Errorf("%s: %v", p, err)
+			continue
 		}
+		if c.Path != p {
+			t.Errorf("%s: path %q", p, c.Path)
+		}
+		if f := c.Fail2ban; f != nil && !f.Unban {
+			t.Errorf("%s: the example should show fail2ban: {unban: true}", p)
+		}
+	}
+}
+
+func TestAdmins(t *testing.T) {
+	c, err := LoadServer(write(t, "admins: [marcus@example.com]"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for v, want := range map[string]bool{"marcus@example.com": true, "Marcus@Example.com": true, "other@example.com": false, "local": false, "": false, "100.64.0.1": false} {
+		if c.IsAdmin(v) != want {
+			t.Errorf("IsAdmin(%q) = %v", v, !want)
+		}
+	}
+	if (&Server{}).IsAdmin("marcus@example.com") {
+		t.Error("admin without an admins list")
 	}
 }

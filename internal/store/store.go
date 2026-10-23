@@ -97,6 +97,22 @@ CREATE TABLE IF NOT EXISTS host_meta (
 	at    INTEGER NOT NULL
 );
 
+-- Unban requests from the UI, one row per address per host. The host's next
+-- report fetches it (sent_at); the report after that carries the result (done_at).
+-- A row that waits longer than an hour is expired: done_at set, sent_at 0.
+CREATE TABLE IF NOT EXISTS unbans (
+	id           INTEGER PRIMARY KEY,
+	ip           TEXT    NOT NULL,
+	host         TEXT    NOT NULL,
+	requested_by TEXT    NOT NULL,
+	requested_at INTEGER NOT NULL,
+	sent_at      INTEGER NOT NULL DEFAULT 0,
+	done_at      INTEGER NOT NULL DEFAULT 0,
+	ok           INTEGER NOT NULL DEFAULT 0,
+	msg          TEXT    NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS unbans_host ON unbans(host, sent_at, done_at);
+
 CREATE TABLE IF NOT EXISTS kv (
 	key   TEXT PRIMARY KEY,
 	value TEXT NOT NULL

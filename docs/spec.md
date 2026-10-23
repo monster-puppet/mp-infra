@@ -15,7 +15,14 @@ ends with something deployed and useful, and its own acceptance checks.
    in five seconds.
 
 Non-goals: metrics graphs, log aggregation, uptime SLAs, multi-tenant, remote control.
-The app **reads**. It never changes anything on a host.
+The app **reads**. It never changes anything on a host. The single exception is
+**unban** (`sec.fail2ban`): an admin (server config `admins`) pastes an IP address on
+`/unban`, and each host whose own `agent.yaml` has `fail2ban: {unban: true}` gets it in
+the reply to its next report. The server sends only addresses, at most 20, never
+commands. The agent accepts only plain IP addresses (`netip.ParseAddr`: no CIDR,
+hostname or zone), runs the fixed argv `<fail2ban client> unban <ip>` without a
+shell, and sends the results in its next report. Every request, delivery and result
+is stored with who and when.
 
 ## 2. Hosts in scope
 
@@ -167,7 +174,7 @@ see deploy.md).
 | `ssh.auth.<host>` | report: `sshd -T`. Keys only, or passwords too (password or keyboard-interactive, with `AuthenticationMethods` chains that need a key counted as keys). ok when keys only, warn when passwords are accepted, crit when root may log in by password too. The network map marks the SSH port chip on the internet line with a key or a password field |
 | `sec.listeners.<host>` | report: listening TCP sockets (not loopback) and their process; ports from 49152 up are reported as "dynamic". Vs. last accepted: warn on change; accept in the UI |
 | `raid.<host>` | report: `/proc/mdstat`. crit when a data array is inactive or missing a member; warn when only a `system` array is (Synology md0/md1, DSM's copy on every disk) or while an array rebuilds or resyncs. A scrub is ok. A one-disk array is ok, noted "no redundancy" |
-| `sec.fail2ban.<host>` | report: `fail2ban-client status` / `banned` and the `Ban` lines in `fail2ban.log` (last 24 h, host local time; "Restore Ban" after a restart is not new). ok while fail2ban runs with an sshd jail; warn when it does not run or has no sshd jail. The network map sums `banned_now` (distinct addresses) and `bans_24h` over all hosts in the internet bubble; a host whose check is not ok gets a shield badge on its internet line |
+| `sec.fail2ban.<host>` | report: `fail2ban-client status` / `banned` and the `Ban` lines in `fail2ban.log` (last 24 h, host local time; "Restore Ban" after a restart is not new). ok while fail2ban runs with an sshd jail; warn when it does not run or has no sshd jail. The data also carries `banned_ips` (sorted, at most 1000 and cut short to fit the 16 KiB data limit, then `banned_ips_cut`), `unban` (the agent's `fail2ban.unban`) and `unban_results` (see §1). The network map sums `banned_now` (distinct addresses) over all hosts in the internet bubble, with an "Unban an IP" link to `/unban`; `bans_24h` stays on the check page. A host whose check is not ok gets a shield badge on its internet line |
 | `smart.<host>` | report: `smartctl -H -A -i` per device. crit on a failed self-assessment, an attribute FAILING_NOW, or pending (197) or uncorrectable (198) sectors; warn on reallocated sectors (5) or an unreadable drive. Attributes are matched by number |
 | `ts.devices` | Tailscale API: devices not in the expected list, or not seen for 30 days |
 | `opsec.items` | Notion OpSec checklist (read-only Notion token), count of open items |
@@ -215,6 +222,13 @@ Public feeds, no credentials (config `notices`, off unless `enabled`). Feeds are
   for `warn` states (e.g. an accepted firewall change). `crit` cannot be acknowledged
   for more than 24 h.
 - **History:** the transitions table, filterable by host.
+- **Unban** (`/unban`): admins paste an IP address and it is queued for every host whose
+  latest `sec.fail2ban` data says `unban: true`. The report handler answers that host's
+  next report with `200 application/json {"unban":[...]}` instead of `204` and marks the
+  rows sent; a request not delivered within 1 h expires. Results from a report update
+  only that host's own rows. Everyone sees where an address is currently banned
+  (`?ip=`, from each host's latest `banned_ips`) and the last 50 requests with a state
+  per host: waiting, sent, done, failed or expired.
 - `/healthz` (no auth, tailnet only) and `/api/status.json` (for the SecondBrain morning
   brief to read one line from).
 

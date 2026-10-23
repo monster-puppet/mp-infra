@@ -211,9 +211,13 @@ func collectors(cfg *config.Agent) []collector {
 			client := func(args ...string) (string, error) {
 				return run(ctx, append(append([]string{}, f.Client...), args...), nil)
 			}
+			u := f2bUnban{Enabled: f.Unban}
+			if cfg.Path != "" {
+				u.Results = loadUnbanResults(UnbanResultsFile(cfg.Path))
+			}
 			out, err := client("status")
 			if err != nil {
-				return []Check{fail2banCheck(id, false, nil, 0, 0, err.Error())}, nil
+				return []Check{fail2banCheck(id, false, nil, 0, 0, err.Error(), u)}, nil
 			}
 			var jails []f2bJail
 			for _, name := range parseF2BJails(out) {
@@ -225,7 +229,8 @@ func collectors(cfg *config.Agent) []collector {
 			}
 			banned := 0
 			if b, err := client("banned"); err == nil {
-				banned = parseF2BBanned(b)
+				u.Banned = parseF2BBanned(b)
+				banned = len(u.Banned)
 			} else { // fail2ban before 0.11: no "banned"; sum the jails
 				for _, j := range jails {
 					banned += j.BannedNow
@@ -235,7 +240,7 @@ func collectors(cfg *config.Agent) []collector {
 			if log, err := tail(f.Log, 4<<20); err == nil {
 				bans = countF2BBans(strings.NewReader(log), time.Now().Add(-24*time.Hour), time.Local)
 			}
-			return []Check{fail2banCheck(id, true, jails, banned, bans, "")}, nil
+			return []Check{fail2banCheck(id, true, jails, banned, bans, "", u)}, nil
 		}})
 	}
 	if w := cfg.Windows; w != nil {

@@ -96,6 +96,7 @@ func (s *Server) Ingest(ctx context.Context, host string, body []byte, p *report
 	if err != nil {
 		return err
 	}
+	s.unbanResults(ctx, host, p, now)
 	s.Alerter.Transitions(ctx, ts)
 	return nil
 }

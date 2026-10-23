@@ -233,7 +233,37 @@ func reportCmd(args []string, send bool) error {
 	if err != nil {
 		return err
 	}
-	return report.Send(ctx, nil, cfg.ServerURL, tok, p)
+	reply, err := report.Send(ctx, nil, cfg.ServerURL, tok, p)
+	if err != nil {
+		return err
+	}
+	return afterReport(ctx, cfg, reply, report.Unban)
+}
+
+// afterReport runs once the server has stored a report: the results file it
+// carried is done with, and the unbans the server asked for are run, if
+// fail2ban.unban allows them, and their results kept for the next report.
+func afterReport(ctx context.Context, cfg *config.Agent, reply *report.Reply,
+	unban func(ctx context.Context, client, ips []string) ([]report.UnbanResult, error)) error {
+	file := report.UnbanResultsFile(cfg.Path)
+	if err := os.Remove(file); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Printf("unban results: %v", err)
+	}
+	if reply == nil || len(reply.Unban) == 0 {
+		return nil
+	}
+	if cfg.Fail2ban == nil || !cfg.Fail2ban.Unban {
+		log.Printf("server asked to unban %d address(es); ignored, fail2ban.unban is off", len(reply.Unban))
+		return nil
+	}
+	results, err := unban(ctx, cfg.Fail2ban.Client, reply.Unban)
+	if err != nil {
+		return fmt.Errorf("unban refused: %w", err)
+	}
+	for _, r := range results {
+		log.Printf("unban %s: ok=%v %s", r.IP, r.OK, r.Msg)
+	}
+	return report.SaveUnbanResults(file, results)
 }
 
 // tokenCmd prints a fresh random token for agent.yaml and its SHA-256 for the

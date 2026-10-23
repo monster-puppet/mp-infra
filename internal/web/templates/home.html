@@ -21,24 +21,20 @@
       <title>Internet</title>
       <rect x="28" y="12" width="150" height="{{sub .H 24}}" rx="75"/>
       {{if .Failed}}
-      {{/* With the fail2ban block the stack moves up 36 to stay inside the bubble's round ends. */}}
-      {{$c := half .H}}{{if .Banned}}{{$c = sub (half .H) 36}}{{end}}
+      {{/* With the fail2ban block the stack moves up 24 to stay inside the bubble's round ends. */}}
+      {{$c := half .H}}{{if .Banned}}{{$c = sub (half .H) 24}}{{end}}
       {{template "globe" (badge 103 (sub $c 56))}}
       <text x="103" y="{{sub $c 8}}" class="bubble-name">Internet</text>
       <text x="103" y="{{add $c 30}}" class="inet-failed failed-{{.FailedClass}}">{{.Failed}}</text>
       <text x="103" y="{{add $c 48}}" class="bubble-note">failed logins</text>
       <text x="103" y="{{add $c 63}}" class="bubble-note">last 24 h</text>
-      {{with .Failed4h}}
-      <text x="103" y="{{add $c 92}}" class="inet-failed inet-failed-small">{{.}}</text>
-      <text x="103" y="{{add $c 108}}" class="bubble-note">last 4 h</text>
-      {{end}}
       {{with .Banned}}
       <g class="inet-banned"><title>{{$.Data.Map.BannedTitle}}</title>
-      {{template "shieldicon" (badge 82 (add $c 136))}}
-      <text x="111" y="{{add $c 142}}" class="inet-failed inet-failed-small">{{.}}</text>
-      <text x="103" y="{{add $c 158}}" class="bubble-note">banned now</text>
-      <text x="103" y="{{add $c 173}}" class="bubble-note">+{{$.Data.Map.Bans24h}} in 24 h</text>
+      {{template "shieldicon" (badge 82 (add $c 96))}}
+      <text x="111" y="{{add $c 102}}" class="inet-failed inet-failed-small">{{.}}</text>
+      <text x="103" y="{{add $c 118}}" class="bubble-note">banned now</text>
       </g>
+      <a href="/unban" class="inet-unban"><text x="103" y="{{add $c 144}}" class="bubble-note bubble-link">Unban an IP</text></a>
       {{end}}
       {{else}}
       {{template "globe" (badge 103 (sub (half .H) 16))}}
@@ -78,13 +74,14 @@
       {{template "glow" (glowArgs "glow-narrow" .NW .NH)}}
     </defs>
     <g class="bubble bubble-internet">
-      <title>Internet{{with .Banned}} · {{.}} banned now, +{{$.Data.Map.Bans24h}} in 24 h{{end}}</title>
+      <title>Internet{{with .Banned}} · {{.}} banned now{{end}}</title>
       <rect x="12" y="10" width="{{sub .NW 24}}" height="68" rx="34"/>
       {{if .Failed}}
       {{template "globe" (badge (sub (half .NW) 110) 44)}}
       <text x="{{sub (half .NW) 32}}" y="50" class="bubble-name">Internet</text>
       <text x="{{add (half .NW) 90}}" y="43" class="inet-failed inet-failed-small failed-{{.FailedClass}}">{{.Failed}}</text>
-      <text x="{{add (half .NW) 90}}" y="60" class="bubble-note">{{if .Failed4h}}/ 24 h · {{.Failed4h}} / 4 h{{else}}failed logins / 24 h{{end}}</text>
+      <text x="{{add (half .NW) 90}}" y="60" class="bubble-note">failed logins / 24 h</text>
+      {{if .Banned}}<a href="/unban" class="inet-unban"><text x="{{sub (half .NW) 32}}" y="68" class="bubble-note bubble-link">Unban an IP</text></a>{{end}}
       {{else}}
       {{template "globe" (badge (sub (half .NW) 50) 44)}}
       <text x="{{add (half .NW) 26}}" y="50" class="bubble-name">Internet</text>

@@ -57,6 +57,10 @@ a host back if the new agent fails `check` or its first report.
 
 Read-only MCP endpoint for Claude Code and other agents: [`docs/mcp.md`](docs/mcp.md).
 
+The one write path: admins (`admins:` in the server config) can unban an IP on
+`/unban`, and hosts whose `agent.yaml` has `fail2ban: {unban: true}` run
+`fail2ban-client unban <ip>` after their next report ([`docs/spec.md`](docs/spec.md) §1).
+
 ## Building with Claude Code in the cloud
 
 The repo is set up for Claude Code on the web (claude.ai/code). `CLAUDE.md` pulls in
