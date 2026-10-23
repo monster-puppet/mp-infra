@@ -932,7 +932,14 @@ pre.data {
 .device-endpoint.device-off:hover,
 .device-endpoint.device-off:focus-within { opacity: 1; }
 .device-card {
-  display: none;
+  /* Hidden by visibility, not display, so it can fade and slide in and out.
+     The show waits 80 ms so passing the mouse over the list does not flash it. */
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+  transform-origin: top left;
+  pointer-events: none;
+  transition: opacity 0.14s ease-in, transform 0.14s ease-in, visibility 0s linear 0.14s;
   position: absolute;
   z-index: 20;
   left: 0;
@@ -945,7 +952,18 @@ pre.data {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 .device-endpoint:hover .device-card,
-.device-endpoint:focus-within .device-card { display: block; }
+.device-endpoint:focus-within .device-card {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  transition: opacity 0.2s ease-out 0.08s, transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) 0.08s, visibility 0s linear 0.08s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .device-card,
+  .device-endpoint:hover .device-card,
+  .device-endpoint:focus-within .device-card { transition: none; transform: none; }
+}
 .device-card.state-warn { box-shadow: inset 3px 0 0 var(--warn), 0 10px 30px rgba(0, 0, 0, 0.45); }
 .device-card.state-crit { box-shadow: inset 3px 0 0 var(--crit), 0 10px 30px rgba(0, 0, 0, 0.45); }
 .device-card.state-stale { box-shadow: inset 3px 0 0 var(--stale), 0 10px 30px rgba(0, 0, 0, 0.45); }
