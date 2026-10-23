@@ -724,7 +724,7 @@ func TestProblemsOnly(t *testing.T) {
 		Data: `{"devices":[{"name":"studio-mac","os":"macOS","connected":true}]}`}, now)
 
 	all := e.get("/").Body.String()
-	for _, want := range []string{`section-title">Agents<`, `section-title">Tailnet<`, "Certificates", "Security notices"} {
+	for _, want := range []string{`section-title">Agents<`, `section-title">Clients<`, "Certificates", "Security notices"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("all view lacks %q", want)
 		}
@@ -743,7 +743,7 @@ func TestProblemsOnly(t *testing.T) {
 	if !strings.Contains(h, "Security notices") || !strings.Contains(h, "1 new notice") {
 		t.Error("problems view lacks the crit notice")
 	}
-	for _, gone := range []string{`section-title">Agents<`, `section-title">Tailnet<`, "Certificates", "up 5s"} {
+	for _, gone := range []string{`section-title">Agents<`, `section-title">Clients<`, "Certificates", "up 5s"} {
 		if strings.Contains(h, gone) {
 			t.Errorf("problems view shows %q", gone)
 		}
