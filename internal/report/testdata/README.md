@@ -25,6 +25,9 @@ runs the collector's parser on it and asserts the expected state.
 | `win_fw_allow_any.json` | `firewallAnyScript` in `win_parse.go` | jenkins-win |
 | `win_updates.json` | `windowsUpdateScript` in `checks.go` | jenkins-win |
 | `win_4625.txt` | the RDP failed-login command in `examples/agent-jenkins-win.yaml` | jenkins-win |
+| `synology_mdstat.txt` | `cat /proc/mdstat`, captured 2026-10-23: md0/md1 missing disk 5, md3 one disk | nas |
+| `synology_smart_sata{1,4,5}.txt` | `smartctl -i -H -A /dev/sataN` as root (smartctl 6.5), serials replaced; sata5 has 8 reallocated sectors | nas |
+| `synology_auth_log.txt` | DSM web login failures from `/var/log/auth.log` and sshd lines from `journalctl -u sshd -o short-iso`, user and IPs replaced | nas |
 
 Questions the captures answer:
 

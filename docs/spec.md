@@ -151,11 +151,13 @@ see deploy.md).
 
 | id | Source |
 |---|---|
-| `auth.failures.<host>` | report: failed SSH/P4/RDP logins in the last 24 h, top source IPs. warn at `warn` total or `warn_per_ip` from one IP (brute force). With a named group `time` in every source pattern: the 4 h count (`last_4h`) and each top IP's newest failure (`last`); a brute force whose IP has not failed for 4 h is reported as ended and stays ok |
+| `auth.failures.<host>` | report: failed SSH/P4/RDP logins in the last 24 h, top source IPs. warn at `warn` total or `warn_per_ip` from one IP (brute force). With a named group `time` in every source pattern: the 4 h count (`last_4h`) and each top IP's newest failure (`last`); a brute force whose IP has not failed for 4 h is reported as ended and stays ok. A match whose `time` is older than 24 h is ignored, so a source can be a whole log file (DSM's `auth.log`) |
 | `auth.logins.<host>` | report: successful SSH/RDP logins in the last 24 h. crit when one comes from outside the tailnet, loopback and `logins.allow`, unless the server matches the address to the current public endpoint of an untagged (personal) tailnet device from `ts.devices`. A source pattern with a named group `time` adds each login's newest time (`last`, UTC) and the summary says how long ago the outside login was |
 | `sec.accounts.<host>` | report: uid 0 and login-shell accounts, wheel/sudo members, sudoers hashes, authorized_keys fingerprints (Windows: enabled users, Administrators / RDP / WinRM group members). Item list vs. last accepted: crit on any change, the summary names what was added and removed; accept in the UI |
 | `ssh.auth.<host>` | report: `sshd -T`. Keys only, or passwords too (password or keyboard-interactive, with `AuthenticationMethods` chains that need a key counted as keys). ok when keys only, warn when passwords are accepted, crit when root may log in by password too. The network map marks the SSH port chip on the internet line with a key or a password field |
 | `sec.listeners.<host>` | report: listening TCP sockets (not loopback) and their process; ports from 49152 up are reported as "dynamic". Vs. last accepted: warn on change; accept in the UI |
+| `raid.<host>` | report: `/proc/mdstat`. crit when a data array is inactive or missing a member; warn when only a `system` array is (Synology md0/md1, DSM's copy on every disk) or while an array rebuilds or resyncs. A scrub is ok. A one-disk array is ok, noted "no redundancy" |
+| `smart.<host>` | report: `smartctl -H -A -i` per device. crit on a failed self-assessment, an attribute FAILING_NOW, or pending (197) or uncorrectable (198) sectors; warn on reallocated sectors (5) or an unreadable drive. Attributes are matched by number |
 | `ts.devices` | Tailscale API: devices not in the expected list, or not seen for 30 days |
 | `opsec.items` | Notion OpSec checklist (read-only Notion token), count of open items |
 

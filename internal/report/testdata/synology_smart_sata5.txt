@@ -1,0 +1,52 @@
+smartctl 6.5 (build date Sep 26 2022) [x86_64-linux-4.4.302+] (local build)
+Copyright (C) 2002-16, Bruce Allen, Christian Franke, www.smartmontools.org
+
+=== START OF INFORMATION SECTION ===
+Model Family:     Seagate Barracuda 7200.14 (AF)
+Device Model:     ST3000DM001-1ER166
+Serial Number:    SERIAL
+LU WWN Device Id: WWN
+Firmware Version: CC46
+User Capacity:    3,000,592,982,016 bytes [3.00 TB]
+Sector Sizes:     512 bytes logical, 4096 bytes physical
+Rotation Rate:    7200 rpm
+Form Factor:      3.5 inches
+Device is:        In smartctl database [for details use: -P show]
+ATA Version is:   ACS-2, ACS-3 T13/2161-D revision 3b
+SATA Version is:  SATA 3.1, 6.0 Gb/s (current: 6.0 Gb/s)
+Local Time is:    2026-10-23
+SMART support is: Available - device has SMART capability.
+SMART support is: Enabled
+
+=== START OF READ SMART DATA SECTION ===
+SMART overall-health self-assessment test result: PASSED
+See vendor-specific Attribute list for marginal Attributes.
+
+SMART Attributes Data Structure revision number: 10
+Vendor Specific SMART Attributes with Thresholds:
+ID# ATTRIBUTE_NAME                                                   FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE
+  1 Raw_Read_Error_Rate                                              0x000f   114   099   006    Pre-fail  Always       -       83031312
+  3 Spin_Up_Time                                                     0x0003   092   092   000    Pre-fail  Always       -       0
+  4 Start_Stop_Count                                                 0x0032   067   067   020    Old_age   Always       -       33865
+  5 Reallocated_Sector_Ct                                            0x0033   100   100   010    Pre-fail  Always       -       8
+  7 Seek_Error_Rate                                                  0x000f   070   060   030    Pre-fail  Always       -       107700311591
+  9 Power_On_Hours                                                   0x0032   052   052   000    Old_age   Always       -       42511
+ 10 Spin_Retry_Count                                                 0x0013   100   100   097    Pre-fail  Always       -       0
+ 12 Power_Cycle_Count                                                0x0032   100   100   020    Old_age   Always       -       301
+183 Runtime_Bad_Block                                                0x0032   100   100   000    Old_age   Always       -       0
+184 End-to-End_Error                                                 0x0032   100   100   099    Old_age   Always       -       0
+187 Reported_Uncorrect                                               0x0032   100   100   000    Old_age   Always       -       0
+188 Command_Timeout                                                  0x0032   100   099   000    Old_age   Always       -       5 5 5
+189 High_Fly_Writes                                                  0x003a   093   093   000    Old_age   Always       -       7
+190 Airflow_Temperature_Cel                                          0x0022   066   042   045    Old_age   Always   In_the_past 34 (0 91 39 33 0)
+191 G-Sense_Error_Rate                                               0x0032   100   100   000    Old_age   Always       -       0
+192 Power-Off_Retract_Count                                          0x0032   100   100   000    Old_age   Always       -       105
+193 Load_Cycle_Count                                                 0x0032   057   057   000    Old_age   Always       -       87991
+194 Temperature_Celsius                                              0x0022   034   058   000    Old_age   Always       -       34 (0 12 0 0 0)
+197 Current_Pending_Sector                                           0x0012   100   100   000    Old_age   Always       -       0
+198 Offline_Uncorrectable                                            0x0010   100   100   000    Old_age   Offline      -       0
+199 UDMA_CRC_Error_Count                                             0x003e   200   200   000    Old_age   Always       -       0
+240 Head_Flying_Hours                                                0x0000   100   253   000    Old_age   Offline      -       19103h+41m+39.791s
+241 Total_LBAs_Written                                               0x0000   100   253   000    Old_age   Offline      -       65778717412
+242 Total_LBAs_Read                                                  0x0000   100   253   000    Old_age   Offline      -       632235375455
+

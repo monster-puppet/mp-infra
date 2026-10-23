@@ -473,6 +473,10 @@ func authCheck(ctx context.Context, id string, af *config.AuthFailures, now time
 // failed within it is over, so it no longer warns.
 const RecentWindow = 4 * time.Hour
 
+// AuthWindow is the window auth.failures counts: failures with a parsed time
+// older than this are ignored.
+const AuthWindow = 24 * time.Hour
+
 func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error, now time.Time) Check {
 	total, recent, timed := 0, 0, true
 	ips := map[string]int{}
@@ -493,20 +497,28 @@ func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error, n
 			if m == nil {
 				continue
 			}
+			var t time.Time
+			hasTime := false
+			if timeIdx > 0 {
+				t, hasTime = parseLoginTime(m[timeIdx])
+			}
+			// A source that is a whole log file (DSM's auth.log) is cut to the
+			// 24 h window here; journalctl sources already pass --since -24h.
+			if hasTime && now.Sub(t) > AuthWindow {
+				continue
+			}
 			ac.Count++
 			ip := ""
 			if ipIdx > 0 && m[ipIdx] != "" {
 				ip = Clip(m[ipIdx], 64)
 				ips[ip]++
 			}
-			if timeIdx > 0 {
-				if t, ok := parseLoginTime(m[timeIdx]); ok {
-					if now.Sub(t) <= RecentWindow {
-						recent++
-					}
-					if ip != "" && t.After(lastIP[ip]) {
-						lastIP[ip] = t
-					}
+			if hasTime {
+				if now.Sub(t) <= RecentWindow {
+					recent++
+				}
+				if ip != "" && t.After(lastIP[ip]) {
+					lastIP[ip] = t
 				}
 			}
 		}

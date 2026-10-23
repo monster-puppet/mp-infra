@@ -1,0 +1,52 @@
+smartctl 6.5 (build date Sep 26 2022) [x86_64-linux-4.4.302+] (local build)
+Copyright (C) 2002-16, Bruce Allen, Christian Franke, www.smartmontools.org
+
+=== START OF INFORMATION SECTION ===
+Model Family:     Seagate IronWolf
+Device Model:     ST10000VN0004-1ZD101
+Serial Number:    SERIAL
+LU WWN Device Id: WWN
+Firmware Version: SC61
+User Capacity:    10,000,831,348,736 bytes [10.0 TB]
+Sector Sizes:     512 bytes logical, 4096 bytes physical
+Rotation Rate:    7200 rpm
+Form Factor:      3.5 inches
+Device is:        In smartctl database [for details use: -P show]
+ATA Version is:   ACS-3 T13/2161-D revision 5
+SATA Version is:  SATA 3.1, 6.0 Gb/s (current: 6.0 Gb/s)
+Local Time is:    2026-10-23
+SMART support is: Available - device has SMART capability.
+SMART support is: Enabled
+
+=== START OF READ SMART DATA SECTION ===
+SMART overall-health self-assessment test result: PASSED
+
+SMART Attributes Data Structure revision number: 10
+Vendor Specific SMART Attributes with Thresholds:
+ID# ATTRIBUTE_NAME                                                   FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE
+  1 Raw_Read_Error_Rate                                              0x000f   079   064   044    Pre-fail  Always       -       73877449
+  3 Spin_Up_Time                                                     0x0003   089   089   000    Pre-fail  Always       -       0
+  4 Start_Stop_Count                                                 0x0032   100   100   020    Old_age   Always       -       163
+  5 Reallocated_Sector_Ct                                            0x0033   100   100   010    Pre-fail  Always       -       0
+  7 Seek_Error_Rate                                                  0x000f   090   060   045    Pre-fail  Always       -       954503348
+  9 Power_On_Hours                                                   0x0032   035   035   000    Old_age   Always       -       57166
+ 10 Spin_Retry_Count                                                 0x0013   100   100   097    Pre-fail  Always       -       0
+ 12 Power_Cycle_Count                                                0x0032   100   100   020    Old_age   Always       -       162
+184 End-to-End_Error                                                 0x0032   100   100   099    Old_age   Always       -       0
+187 Reported_Uncorrect                                               0x0032   100   100   000    Old_age   Always       -       0
+188 Command_Timeout                                                  0x0032   100   100   000    Old_age   Always       -       0 0 0
+189 High_Fly_Writes                                                  0x003a   078   078   000    Old_age   Always       -       22
+190 Airflow_Temperature_Cel                                          0x0022   066   053   040    Old_age   Always       -       34 (Min/Max 33/39)
+191 G-Sense_Error_Rate                                               0x0032   088   088   000    Old_age   Always       -       24095
+192 Power-Off_Retract_Count                                          0x0032   100   100   000    Old_age   Always       -       1993
+193 Load_Cycle_Count                                                 0x0032   099   099   000    Old_age   Always       -       2486
+194 Temperature_Celsius                                              0x0022   034   047   000    Old_age   Always       -       34 (0 11 0 0 0)
+195 Hardware_ECC_Recovered                                           0x001a   009   001   000    Old_age   Always       -       73877449
+197 Current_Pending_Sector                                           0x0012   100   100   000    Old_age   Always       -       0
+198 Offline_Uncorrectable                                            0x0010   100   100   000    Old_age   Offline      -       0
+199 UDMA_CRC_Error_Count                                             0x003e   200   200   000    Old_age   Always       -       0
+200 Pressure_Limit                                                   0x0023   100   100   001    Pre-fail  Always       -       0
+240 Head_Flying_Hours                                                0x0000   100   253   000    Old_age   Offline      -       56877h+48m+19.262s
+241 Total_LBAs_Written                                               0x0000   100   253   000    Old_age   Offline      -       312905481554
+242 Total_LBAs_Read                                                  0x0000   100   253   000    Old_age   Offline      -       662733496425
+

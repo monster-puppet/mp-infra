@@ -1,0 +1,48 @@
+smartctl 6.5 (build date Sep 26 2022) [x86_64-linux-4.4.302+] (local build)
+Copyright (C) 2002-16, Bruce Allen, Christian Franke, www.smartmontools.org
+
+=== START OF INFORMATION SECTION ===
+Model Family:     Ironwolf
+Device Model:     ST10000VN000-3AK101
+Serial Number:    SERIAL
+LU WWN Device Id: WWN
+Firmware Version: SC60
+User Capacity:    10,000,831,348,736 bytes [10.0 TB]
+Sector Sizes:     512 bytes logical, 4096 bytes physical
+Rotation Rate:    7200 rpm
+Form Factor:      3.5 inches
+Device is:        In smartctl database [for details use: -P show]
+ATA Version is:   Unknown(0x0fe0) (minor revision not indicated)
+SATA Version is:  SATA >3.2 (0x1ff), 6.0 Gb/s (current: 6.0 Gb/s)
+Local Time is:    2026-10-23
+SMART support is: Available - device has SMART capability.
+SMART support is: Enabled
+
+=== START OF READ SMART DATA SECTION ===
+SMART overall-health self-assessment test result: PASSED
+
+SMART Attributes Data Structure revision number: 10
+Vendor Specific SMART Attributes with Thresholds:
+ID# ATTRIBUTE_NAME                                                   FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE
+  1 Raw_Read_Error_Rate                                              0x000f   083   064   044    Pre-fail  Always       -       214907818
+  3 Spin_Up_Time                                                     0x0003   087   087   000    Pre-fail  Always       -       0
+  4 Start/Stop_Count                                                 0x0032   100   100   020    Old_age   Always       -       100
+  5 Retired_Sectors_Count                                            0x0033   100   100   010    Pre-fail  Always       -       0
+  7 Seek_Error_Rate                                                  0x000f   088   060   045    Pre-fail  Always       -       681856986
+  9 Power_On_Hours                                                   0x0032   068   068   000    Old_age   Always       -       28815
+ 10 Spin_Retry_Count                                                 0x0013   100   100   097    Pre-fail  Always       -       0
+ 12 Drive_Power_Cycle_Count                                          0x0032   100   100   020    Old_age   Always       -       99
+ 18 H2SAT_Predictive_Failure_Reporting                               0x000b   100   100   050    Pre-fail  Always       -       0
+187 Reported_Uncorrectables                                          0x0032   100   100   000    Old_age   Always       -       0
+188 Command_Timeout_Count                                            0x0032   100   100   000    Old_age   Always       -       0
+190 Airflow_Temperature                                              0x0022   060   047   000    Old_age   Always       -       40 (Min/Max 40/46)
+192 Emergency_Retract_Count                                          0x0032   100   100   000    Old_age   Always       -       66
+193 Load/Unload_Count                                                0x0032   100   100   000    Old_age   Always       -       1267
+194 Temperature                                                      0x0022   040   053   000    Old_age   Always       -       40 (0 17 0 0 0)
+197 Pending-Sparing_Count                                            0x0012   100   100   000    Old_age   Always       -       0
+198 UNC_Sectors_Count                                                0x0010   100   100   000    Old_age   Offline      -       0
+199 Ultra_DMA_CRC_Error_Count                                        0x003e   200   200   000    Old_age   Always       -       0
+240 Head_Flight_Hours                                                0x0000   100   253   000    Old_age   Offline      -       152050432241758
+241 Lifetime_Writes_From_Host                                        0x0000   100   253   000    Old_age   Offline      -       165616768005
+242 Lifetime_Reads_From_Host                                         0x0000   100   253   000    Old_age   Offline      -       3067336735333
+

@@ -248,7 +248,7 @@ var noLogin = map[string]bool{
 }
 
 // adminGroups grant root through sudo or polkit.
-var adminGroups = map[string]bool{"wheel": true, "sudo": true, "admin": true, "root": true}
+var adminGroups = map[string]bool{"wheel": true, "sudo": true, "admin": true, "root": true, "administrators": true} // administrators: Synology DSM
 
 // linuxAccounts lists what decides who can get a root shell on the host under
 // root (normally "/"): accounts with uid 0 or a login shell, members of the admin

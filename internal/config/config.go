@@ -359,7 +359,7 @@ func CheckHostMeta(label, os string) error {
 }
 
 // OSList is the os values in the order the UI offers them.
-var OSList = []string{"rocky", "centos", "ubuntu", "debian", "linux", "windows"}
+var OSList = []string{"rocky", "centos", "ubuntu", "debian", "dsm", "linux", "windows"}
 
 // OSNames maps the allowed values of a host's os to the name the UI shows.
 var OSNames = map[string]string{
@@ -368,6 +368,7 @@ var OSNames = map[string]string{
 	"centos":  "CentOS Stream",
 	"ubuntu":  "Ubuntu",
 	"debian":  "Debian",
+	"dsm":     "Synology DSM",
 	"windows": "Windows Server",
 }
 
@@ -610,7 +611,24 @@ type Agent struct {
 	Logins          *Logins        `yaml:"logins"`
 	Accounts        bool           `yaml:"accounts"`  // sec.accounts: admins, sudoers, SSH keys
 	Listeners       bool           `yaml:"listeners"` // sec.listeners: listening TCP ports
+	RAID            *RAID          `yaml:"raid"`      // raid.<host>: Linux md arrays from /proc/mdstat
+	SMART           *SMART         `yaml:"smart"`     // smart.<host>: drive health from smartctl
 	Windows         *WindowsChecks `yaml:"windows"`
+}
+
+// RAID reads the Linux md arrays (Synology SHR and RAID are md arrays too).
+type RAID struct {
+	Path string `yaml:"path"` // default /proc/mdstat
+	// System lists arrays that hold only an OS copy on every disk (Synology md0
+	// and md1). A missing member there warns instead of crit: the data is intact.
+	System []string `yaml:"system"`
+}
+
+// SMART runs Cmd with each device appended and reads smartctl's health verdict
+// and the sector counters.
+type SMART struct {
+	Cmd     []string `yaml:"cmd"`     // default ["smartctl", "-H", "-A", "-i"]
+	Devices []string `yaml:"devices"` // e.g. /dev/sata1 on Synology, /dev/sda elsewhere
 }
 
 // FileAge points a collector at a log file or directory and the age at which it
@@ -746,6 +764,22 @@ func LoadAgent(path string) (*Agent, error) {
 	for _, cmd := range []*Command{c.P4License, c.Firewall, c.SSHD} {
 		if cmd != nil && len(cmd.Cmd) == 0 {
 			return nil, fmt.Errorf("%s: p4_license, firewall and sshd need a cmd", path)
+		}
+	}
+	if c.RAID != nil && c.RAID.Path == "" {
+		c.RAID.Path = "/proc/mdstat"
+	}
+	if s := c.SMART; s != nil {
+		if len(s.Cmd) == 0 {
+			s.Cmd = []string{"smartctl", "-H", "-A", "-i"}
+		}
+		if len(s.Devices) == 0 {
+			return nil, fmt.Errorf("%s: smart needs devices", path)
+		}
+		for _, d := range s.Devices {
+			if !strings.HasPrefix(d, "/dev/") {
+				return nil, fmt.Errorf("%s: smart device %q must be a /dev path", path, d)
+			}
 		}
 	}
 	if c.Windows != nil && c.Windows.TailscaleService == "" {

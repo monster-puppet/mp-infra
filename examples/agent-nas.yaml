@@ -1,0 +1,47 @@
+# Agent config for the NAS (Synology DS1522+, DSM 7.2). Install as
+# /etc/mp-infra/agent.yaml, mode 0600, and run `mpinfra report` every 5 minutes
+# from DSM's Task Scheduler as root (DSM has no crontab for users and rewrites
+# /etc/crontab from the scheduler).
+host: nas
+server_url: "http://TAILNET_IP_OF_SERVE:8099"
+token: "PASTE_TOKEN_FROM_mpinfra_token"
+
+disks: ["/volume2", "/volume3"]
+
+# raid.nas: the md arrays behind DSM's storage pools. md0 and md1 are DSM's own
+# system and swap partitions on every disk: a gap there warns ("System Partition
+# Failed" in Storage Manager, repaired from there); a gap in a data array is crit.
+raid:
+  system: [md0, md1]
+
+# smart.nas: drive health. DSM 7.2's smartctl 6.5 cannot read the NVMe cache
+# drives; their mirror (md5) is covered by raid.
+smart:
+  devices: [/dev/sata1, /dev/sata2, /dev/sata3, /dev/sata4, /dev/sata5]
+
+# ssh.auth.nas
+sshd:
+  cmd: ["/usr/bin/sshd", "-T"]
+
+auth_failures:
+  warn_per_ip: 100
+  sources:
+    # DSM web (and Drive, File Station) logins. auth.log holds weeks; the agent
+    # counts the last 24 h by the time at the start of each line.
+    - name: dsm-web
+      cmd: ["cat", "/var/log/auth.log"]
+      pattern: '^(?P<time>\S+) .*pam_unix\(webui:auth\): authentication failure;.* rhost=(?P<ip>[0-9a-fA-F.:]+)'
+    - name: ssh
+      cmd: ["journalctl", "-u", "sshd", "--since", "-24h", "--no-pager", "-o", "short-iso"]
+      pattern: '^(?P<time>\S+) .*(?:Failed password|Invalid user) .* from (?P<ip>[0-9a-fA-F.:]+)'
+
+# SSH logins. The office LAN is where the NAS is used from, so it is allowed.
+logins:
+  allow: ["OFFICE_LAN_CIDR"]
+  sources:
+    - name: ssh
+      cmd: ["journalctl", "-u", "sshd", "--since", "-24h", "--no-pager", "-o", "short-iso"]
+      pattern: '^(?P<time>\S+) \S+ sshd\[\d+\]: Accepted \S+ for (?P<user>\S+) from (?P<ip>[0-9a-fA-F.:]+)'
+
+accounts: true
+listeners: true

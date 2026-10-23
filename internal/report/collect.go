@@ -177,6 +177,34 @@ func collectors(cfg *config.Agent) []collector {
 			return []Check{itemsCheck(id, "listening ports", items)}, nil
 		}})
 	}
+	if r := cfg.RAID; r != nil {
+		id := "raid." + cfg.Host
+		cs = append(cs, collector{id: id, onError: eval.Warn, run: func(context.Context) ([]Check, error) {
+			b, err := os.ReadFile(r.Path)
+			if err != nil {
+				return nil, err
+			}
+			return []Check{raidCheck(id, string(b), r.System)}, nil
+		}})
+	}
+	if s := cfg.SMART; s != nil {
+		id := "smart." + cfg.Host
+		cs = append(cs, collector{id: id, onError: eval.Warn, run: func(ctx context.Context) ([]Check, error) {
+			disks := make([]smartDisk, 0, len(s.Devices))
+			for _, dev := range s.Devices {
+				// smartctl's exit status is a bit mask that is non-zero on healthy
+				// drives too (32: an attribute crossed its threshold in the past),
+				// so the output decides; the error only counts when it says nothing.
+				out, err := run(ctx, append(append([]string{}, s.Cmd...), dev), nil)
+				d := parseSmart(dev, out)
+				if d.Health == "" && err != nil {
+					d.Error = Clip(err.Error(), 200)
+				}
+				disks = append(disks, d)
+			}
+			return []Check{smartCheck(id, disks)}, nil
+		}})
+	}
 	if w := cfg.Windows; w != nil {
 		cs = append(cs, windowsCollectors(w)...)
 	}
