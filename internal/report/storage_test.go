@@ -1,6 +1,7 @@
 package report
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -136,5 +137,11 @@ func TestDSMAuthLog(t *testing.T) {
 	c = evalAuth("auth.failures.nas", af, []string{log, log}, []error{nil, nil}, at("2026-10-23T14:00:00+02:00"))
 	if !strings.HasPrefix(c.Summary, "1 failed login") {
 		t.Errorf("aged: %s %q", c.State, c.Summary)
+	}
+	// Failures from an ignored network (the office LAN) are not counted.
+	af.IgnoreNets = []netip.Prefix{netip.MustParsePrefix("192.0.2.0/24")}
+	c = evalAuth("auth.failures.nas", af, []string{log, log}, []error{nil, nil}, at("2026-10-23T09:00:00+02:00"))
+	if !strings.HasPrefix(c.Summary, "0 failed logins in 24 h") || !strings.Contains(string(c.Data), `"ignored":4`) {
+		t.Errorf("ignored: %s %q %s", c.State, c.Summary, c.Data)
 	}
 }

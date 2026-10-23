@@ -25,6 +25,7 @@ sshd:
 
 auth_failures:
   warn_per_ip: 100
+  ignore: ["192.168.68.0/22"]   # the office LAN: a stale saved password there is noise
   sources:
     # DSM web (and Drive, File Station) logins. auth.log holds weeks; the agent
     # counts the last 24 h by the time at the start of each line.

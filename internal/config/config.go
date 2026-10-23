@@ -658,6 +658,11 @@ type AuthFailures struct {
 	Warn      int          `yaml:"warn"`        // total failures that turn the check warn; 0 = never
 	WarnPerIP int          `yaml:"warn_per_ip"` // failures from one IP that turn it warn; 0 = never
 	Sources   []AuthSource `yaml:"sources"`
+	// Ignore lists CIDRs whose failures are not counted (the office LAN, where a
+	// stale saved password is noise, not an attack). Reported as "ignored".
+	Ignore []string `yaml:"ignore"`
+
+	IgnoreNets []netip.Prefix `yaml:"-"` // Ignore, parsed
 }
 
 // Logins lists successful logins, one source per service. A login from an address
@@ -730,6 +735,13 @@ func LoadAgent(path string) (*Agent, error) {
 		}
 	}
 	if c.AuthFailures != nil {
+		for _, a := range c.AuthFailures.Ignore {
+			p, err := netip.ParsePrefix(a)
+			if err != nil {
+				return nil, fmt.Errorf("%s: auth_failures ignore %q: want a CIDR such as 192.168.1.0/24", path, a)
+			}
+			c.AuthFailures.IgnoreNets = append(c.AuthFailures.IgnoreNets, p.Masked())
+		}
 		for _, src := range c.AuthFailures.Sources {
 			if len(src.Cmd) == 0 || src.Pattern == "" {
 				return nil, fmt.Errorf("%s: auth source %q needs cmd and pattern", path, src.Name)

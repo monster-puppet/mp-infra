@@ -478,7 +478,7 @@ const RecentWindow = 4 * time.Hour
 const AuthWindow = 24 * time.Hour
 
 func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error, now time.Time) Check {
-	total, recent, timed := 0, 0, true
+	total, recent, ignored, timed := 0, 0, 0, true
 	ips := map[string]int{}
 	lastIP := map[string]time.Time{}
 	var per []authCount
@@ -507,10 +507,16 @@ func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error, n
 			if hasTime && now.Sub(t) > AuthWindow {
 				continue
 			}
-			ac.Count++
 			ip := ""
 			if ipIdx > 0 && m[ipIdx] != "" {
 				ip = Clip(m[ipIdx], 64)
+			}
+			if ip != "" && allowedIP(ip, af.IgnoreNets) {
+				ignored++
+				continue
+			}
+			ac.Count++
+			if ip != "" {
 				ips[ip]++
 			}
 			if hasTime {
@@ -574,6 +580,9 @@ func evalAuth(id string, af *config.AuthFailures, outs []string, errs []error, n
 	d := map[string]any{"total": total, "sources": per, "top_ips": top}
 	if timed {
 		d["last_4h"] = recent
+	}
+	if len(af.IgnoreNets) > 0 {
+		d["ignored"] = ignored // from auth_failures.ignore networks, not in total
 	}
 	c.Data = mustJSON(d)
 	return c
