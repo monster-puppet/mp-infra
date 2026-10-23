@@ -94,7 +94,11 @@
     </a>
     {{end}}
   </svg>
-  <p class="map-legend"><span class="lg lg-ok"></span>ok <span class="lg lg-warn"></span>warn <span class="lg lg-crit"></span>crit <span class="lg lg-stale"></span>stale <span class="lg lg-none"></span>no data · <span class="lg-chip">22</span> open port <span class="lg-chip lg-chip-bad">8080</span> unexpected <span class="lg-chip lg-chip-closed">443</span> expected, closed · <span class="lg-chip"><svg class="lg-auth" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg>22</span> SSH keys only <span class="lg-chip lg-chip-pwd"><svg class="lg-auth" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M7 12h.01M12 12h.01M17 12h.01"/></svg>22</span> SSH accepts passwords</p>
+  <p class="map-legend">
+    <span class="lg-group"><span class="lg lg-ok"></span>ok<span class="lg lg-warn"></span>warn<span class="lg lg-crit"></span>crit<span class="lg lg-stale"></span>stale<span class="lg lg-none"></span>no data</span>
+    <span class="lg-group"><span class="lg-chip">22</span>open<span class="lg-chip lg-chip-bad">8080</span>unexpected<span class="lg-chip lg-chip-closed">443</span>closed</span>
+    <span class="lg-group">SSH<svg class="lg-auth lg-auth-key" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg>key<svg class="lg-auth lg-auth-pwd" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M7 12h.01M12 12h.01M17 12h.01"/></svg>password</span>
+  </p>
 </section>
 {{end}}
 
