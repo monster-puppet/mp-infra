@@ -18,6 +18,8 @@ runs the collector's parser on it and asserts the expected state.
 | `firewall_list_all.txt` | `firewall-cmd --list-all` | monster-p4, jenkins |
 | `dnf_updateinfo_security.txt` | `dnf -q updateinfo list --security` | monster-p4, jenkins |
 | `apt_list_upgradable.txt` | `LC_ALL=C apt list --upgradable` | p4-game |
+| `sshd_T_monster-p4.txt` | `/usr/sbin/sshd -T` as root (OpenSSH 8.0), captured 2026-10-23 | monster-p4 |
+| `sshd_T_jenkins.txt` | `/usr/sbin/sshd -T` as root (OpenSSH 8.7), captured 2026-10-23 | jenkins |
 | `journal_sshd.txt` | `journalctl -u sshd --since -24h -o cat`, a few failed-login lines | any |
 | `win_tailscale_service.json` | `tailscaleServiceScript` in `win_parse.go` | jenkins-win |
 | `win_fw_allow_any.json` | `firewallAnyScript` in `win_parse.go` | jenkins-win |

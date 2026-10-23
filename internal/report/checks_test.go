@@ -365,3 +365,24 @@ func TestSSHAuth(t *testing.T) {
 		t.Error("garbage output passed")
 	}
 }
+
+func TestSSHAuthCaptured(t *testing.T) {
+	// Both hosts: keys only, PermitRootLogin prohibit-password, which sshd -T prints
+	// as "without-password". monster-p4 runs OpenSSH 8.0 (challengeresponse and
+	// kbdinteractive), jenkins 8.7 (kbdinteractive only).
+	for _, f := range []string{"sshd_T_monster-p4.txt", "sshd_T_jenkins.txt"} {
+		b, err := os.ReadFile(filepath.Join("testdata", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, err := sshAuthCheck("ssh.auth.h", string(b))
+		if err != nil {
+			t.Fatalf("%s: %v", f, err)
+		}
+		d := data(t, c)
+		if c.State != eval.OK || c.Summary != "SSH on 22: keys only, root by key" ||
+			d["mode"] != "key" || d["password"] != false || d["permit_root_login"] != "without-password" {
+			t.Errorf("%s: %s %q %v", f, c.State, c.Summary, d)
+		}
+	}
+}
