@@ -155,7 +155,7 @@ func emoji(it Item) string {
 	case it.Kind == eval.Recovery:
 		return ":large_green_circle:"
 	case it.New == eval.Crit:
-		return ":red_circle:"
+		return ":alert:" // custom emoji in the Monster Puppet workspace
 	case it.New == eval.Stale:
 		return ":hourglass:"
 	}
