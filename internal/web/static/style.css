@@ -1167,6 +1167,14 @@ pre.data {
 .node-stale .node-box { stroke: var(--stale); }
 
 .node-dot { stroke: none; }
+/* OS logo on a host box: muted beside the name; in the phone layout's circle it
+   replaces the state dot and takes the state's colour. */
+.node-os .device-logo { fill: var(--text-muted); }
+.node-os .logo-cut { fill: #1f1918; }
+.node-ok .node-os-narrow .device-logo { fill: var(--ok); }
+.node-warn .node-os-narrow .device-logo { fill: var(--warn); }
+.node-crit .node-os-narrow .device-logo { fill: var(--crit); }
+.node-stale .node-os-narrow .device-logo { fill: var(--stale); }
 .node-ok .node-dot { fill: var(--ok); }
 .node-warn .node-dot { fill: var(--warn); }
 .node-crit .node-dot { fill: var(--crit); }

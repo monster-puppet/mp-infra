@@ -84,7 +84,8 @@ type mapNode struct {
 	Internet mapLink
 	Tailnet  mapLink
 	// Failed logins on this host in the last 24 h, from auth.failures.
-	Failed      string // "1,832 failed logins · 203.0.113.5", "" when none
+	Failed      string // "1,832 failed logins / 24 h", "" when none; fits the box
+	FailedTip   string // Failed plus the source address, for the tooltip
 	FailedShort string // "1,832 failed", for the phone layout
 	FailedState string // the check's state, or "active" during a brute force
 	FailedHref  string
@@ -145,13 +146,15 @@ type mapView struct {
 const (
 	mapW, mapRow, mapPad   = 1000.0, 84.0, 28.0
 	mapBubbleW, mapNodeW   = 150.0, 270.0
+	// The tailnet bubble is wider than the internet one so device names fit.
+	mapTailnetW = 180.0
 	mapNarrowW, mapNarrowH = 400.0, 380.0
 )
 
 func (m *mapView) layout() {
 	n := float64(len(m.Nodes))
 	m.W, m.H = mapW, max(240, n*mapRow+2*mapPad)
-	inEdge, tsEdge := mapPad+mapBubbleW, mapW-mapPad-mapBubbleW
+	inEdge, tsEdge := mapPad+mapBubbleW, mapW-mapPad-mapTailnetW
 	left, right := (mapW-mapNodeW)/2, (mapW+mapNodeW)/2
 	mid := m.H / 2
 	for i := range m.Nodes {
@@ -192,7 +195,7 @@ func (m *mapView) layout() {
 // screen and its name underneath. The bubble's name sits above them and the whole
 // block is centred in the bubble.
 const (
-	devCellW, devCellH, devCols = 62.0, 48.0, 2
+	devCellW, devCellH, devCols = 82.0, 48.0, 2
 	devTop, devBottom           = 52.0, 80.0 // clear of the bubble's rounded ends
 )
 
@@ -209,7 +212,7 @@ func (m *mapView) layoutDevices() {
 	rows := min((len(m.Devices)+devCols-1)/devCols, fitRows)
 	start := max(devTop, m.H/2-(72+float64(rows-1)*devCellH)/2)
 	m.TailnetY = start + 14
-	cx, top := m.W-mapPad-mapBubbleW/2, start+46
+	cx, top := m.W-mapPad-mapTailnetW/2, start+46
 	cell := func(i int) (float64, float64) {
 		return cx + (float64(i%devCols)-0.5)*devCellW, top + float64(i/devCols)*devCellH
 	}
@@ -466,21 +469,22 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 					case d.Active:
 						// Set by the server when the count jumps between two reports.
 						failed += d.Total
+						// The box line stays short; the address goes in the tooltip.
 						nd.Failed = "Under attack"
+						nd.FailedTip = fmt.Sprintf("Under attack · %s failed logins / 24 h", thousands(d.Total))
 						if d.RecentIP != "" {
-							nd.Failed += " · " + d.RecentIP
+							nd.FailedTip += " · from " + d.RecentIP
 						}
-						nd.Failed = clipRunes(nd.Failed, 36)
 						nd.FailedShort = "under attack"
 						nd.FailedState = "active"
 						nd.FailedHref = checkURL(c.Host, c.ID)
 					case d.Total > 0:
 						failed += d.Total
 						nd.Failed = fmt.Sprintf("%s failed login%s / 24 h", thousands(d.Total), plural(d.Total))
+						nd.FailedTip = nd.Failed
 						if len(d.Top) > 0 && d.Top[0].IP != "" {
-							nd.Failed += " · " + d.Top[0].IP
+							nd.FailedTip += " · top " + d.Top[0].IP
 						}
-						nd.Failed = clipRunes(nd.Failed, 36)
 						nd.FailedShort = thousands(d.Total) + " failed"
 						nd.FailedState = string(c.Effective)
 						nd.FailedHref = checkURL(c.Host, c.ID)
@@ -537,7 +541,7 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 					title += " · " + s
 				}
 			}
-			m.Devices = append(m.Devices, mapDevice{Shape: shape, Logo: d.Logo, Name: clipRunes(d.Name, 10), Title: title,
+			m.Devices = append(m.Devices, mapDevice{Shape: shape, Logo: d.Logo, Name: clipRunes(d.Name, 14), Title: title,
 				State: d.State, Href: d.Href})
 		}
 	}

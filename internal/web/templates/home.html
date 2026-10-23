@@ -46,8 +46,8 @@
       {{end}}
     </g>
     <g class="bubble bubble-tailnet">
-      <rect x="{{sub .W 178}}" y="12" width="150" height="{{sub .H 24}}" rx="75"/>
-      <text x="{{sub .W 103}}" y="{{.TailnetY}}" class="bubble-name">Tailnet</text>
+      <rect x="{{sub .W 208}}" y="12" width="180" height="{{sub .H 24}}" rx="90"/>
+      <text x="{{sub .W 118}}" y="{{.TailnetY}}" class="bubble-name">Tailnet</text>
     </g>
     {{range .Devices}}{{if .Href}}<a href="{{.Href}}">{{end}}<g class="map-device{{with .State}} device-{{.}}{{end}}"><title>{{.Title}}</title>{{template "deviceicon" .}}<text x="{{.X}}" y="{{add .Y 25}}" class="device-label">{{.Name}}</text></g>{{if .Href}}</a>{{end}}{{end}}
     {{template "badges" .MoreDevices}}
@@ -57,7 +57,8 @@
     {{range .Links}}{{template "badges" .Badges}}{{end}}
     {{range .Nodes}}
     <a href="{{.Href}}" class="map-node node-{{.State}}{{if eq .FailedState "active"}} node-attacked{{end}}">
-      <title>{{.Name}}: {{.State}}{{with .Failed}} · {{.}}{{end}}</title>
+      <title>{{.Name}}: {{.State}}{{with .FailedTip}} · {{.}}{{end}}</title>
+      {{if and .OS (ne .FailedState "active")}}<g class="node-os" transform="translate({{add .X 98}} {{sub .Y 9}}) scale(0.75)">{{template "oslogo" .OS}}</g>{{end}}
       {{if .Failed}}
       <rect x="{{sub .X 135}}" y="{{sub .Y 30}}" width="270" height="60" rx="10" class="node-box"/>
       <circle cx="{{sub .X 113}}" cy="{{sub .Y 7}}" r="6" class="node-dot"/>
@@ -98,9 +99,9 @@
     {{range .Narrow}}{{template "badges" .Internet.Badges}}{{template "badges" .Tailnet.Badges}}{{end}}
     {{range .Narrow}}
     <a href="{{.Href}}" class="map-node node-{{.State}}{{if eq .FailedState "active"}} node-attacked{{end}}">
-      <title>{{.Name}}: {{.State}}{{with .Failed}} · {{.}}{{end}}</title>
+      <title>{{.Name}}: {{.State}}{{with .FailedTip}} · {{.}}{{end}}</title>
       <circle cx="{{.X}}" cy="{{.Y}}" r="22" class="node-box"/>
-      <circle cx="{{.X}}" cy="{{.Y}}" r="7" class="node-dot"/>
+      {{if .OS}}<g class="node-os node-os-narrow" transform="translate({{sub .X 10}} {{sub .Y 10}}) scale(0.833)">{{template "oslogo" .OS}}</g>{{else}}<circle cx="{{.X}}" cy="{{.Y}}" r="7" class="node-dot"/>{{end}}
       <text x="{{.X}}" y="{{add .Y 44}}" class="node-name node-name-small">{{.Name}}</text>
       {{if .FailedShort}}<text x="{{.X}}" y="{{add .Y 60}}" class="node-failed node-failed-small failed-{{.FailedState}}">{{.FailedShort}}</text>{{end}}
       {{if eq .FailedState "active"}}{{template "attackicon" (badge (add .X 20) (sub .Y 20))}}{{end}}
