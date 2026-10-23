@@ -259,7 +259,11 @@ func TestTailnetLogins(t *testing.T) {
 	s, _, _ := setup(t, config.Host{Name: "a"})
 	ctx := context.Background()
 	devs := []probe.TSDevice{
-		{Name: "marcus-laptop", PublicIPs: []string{"203.0.113.7"}},
+		// Three devices behind one home NAT: the connected one names the address,
+		// by its Tailscale name, not its OS hostname.
+		{Name: "localhost", Machine: "marcus-phone", LastSeen: t0, PublicIPs: []string{"203.0.113.7"}},
+		{Name: "MarcusLaptop", Machine: "marcus-laptop", Connected: true, LastSeen: t0.Add(-time.Hour), PublicIPs: []string{"203.0.113.7"}},
+		{Name: "old-pc", LastSeen: t0.Add(-48 * time.Hour), PublicIPs: []string{"203.0.113.7"}},
 		{Name: "jenkins", Tags: []string{"tag:ci-untrusted"}, PublicIPs: []string{"198.51.100.9"}},
 	}
 	if _, err := s.Store.PutCheck(ctx, store.Check{Host: config.ServeHost, ID: "ts.devices", State: eval.OK,

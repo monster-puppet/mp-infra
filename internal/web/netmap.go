@@ -29,7 +29,10 @@ var (
 type mapLink struct {
 	On    bool   // the host is on this network
 	State string // ok, warn, crit, stale or none
-	Title string
+	// Sealed: an internet line with nothing open and nothing wrong. Drawn faint
+	// and still, so a healthy green line is not read as traffic getting through.
+	Sealed bool
+	Title  string
 	Href  string
 	Path  string // SVG path, filled in by layout
 
@@ -664,6 +667,7 @@ func internetLink(on bool, cs []checkView) mapLink {
 	sort.Slice(l.Ports, func(i, j int) bool { return l.Ports[i].Port < l.Ports[j].Port })
 	if len(l.Ports) == 0 && problem == nil {
 		l.Icon = "lock" // nothing open to the internet
+		l.Sealed = l.State == "ok"
 	}
 	if l.Href == "" || problem == nil {
 		l.Href = checkURL(ports.Host, ports.ID)

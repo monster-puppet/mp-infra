@@ -422,6 +422,31 @@ func TestNetMap(t *testing.T) {
 	}
 }
 
+func TestNetMapSealed(t *testing.T) {
+	// Nothing open and nothing wrong: lock, and a faint line. A problem keeps the
+	// line's colour and pulse even with nothing open.
+	hosts := []config.Host{{Name: "a", PublicIP: "192.0.2.1"}, {Name: "b", PublicIP: "192.0.2.2"}, {Name: "c", PublicIP: "192.0.2.3"}}
+	cv := func(host, id string, s eval.State, data string) checkView {
+		return checkView{Check: store.Check{Host: host, ID: id, State: s, Summary: id, Data: data}, Effective: s}
+	}
+	all := []checkView{
+		cv("a", "ports.public.a", eval.OK, `{"open":[]}`),
+		cv("b", "ports.public.b", eval.OK, `{"open":[]}`),
+		cv("b", "auth.failures.b", eval.Warn, `{}`),
+		cv("c", "ports.public.c", eval.OK, `{"open":[22],"expected":[22]}`),
+	}
+	m := buildMap(hosts, nil, nil, all, nil)
+	if l := m.Nodes[0].Internet; l.Icon != "lock" || !l.Sealed {
+		t.Errorf("a: %+v", l)
+	}
+	if l := m.Nodes[1].Internet; l.Sealed || l.State != "warn" {
+		t.Errorf("b: %+v", l)
+	}
+	if l := m.Nodes[2].Internet; l.Sealed || l.Icon == "lock" {
+		t.Errorf("c: %+v", l)
+	}
+}
+
 func TestNetMapSSHAuth(t *testing.T) {
 	hosts := []config.Host{{Name: "a", PublicIP: "192.0.2.1"}, {Name: "b", PublicIP: "192.0.2.2"}, {Name: "c", PublicIP: "192.0.2.3"}}
 	cv := func(host, id string, s eval.State, data string) checkView {

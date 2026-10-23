@@ -158,7 +158,8 @@ func (s *Server) tailnetLoginsRule(ctx context.Context, c *store.Check, now time
 }
 
 // personalDeviceIPs maps the public addresses of untagged tailnet devices to
-// their names.
+// their Tailscale names. Devices behind one NAT share an address: the one
+// connected now names it, else the one seen last.
 func (s *Server) personalDeviceIPs(ctx context.Context) (map[netip.Addr]string, error) {
 	c, err := s.Store.Check(ctx, config.ServeHost, "ts.devices")
 	if err != nil || c == nil {
@@ -170,15 +171,28 @@ func (s *Server) personalDeviceIPs(ctx context.Context) (map[netip.Addr]string, 
 	if json.Unmarshal([]byte(c.Data), &data) != nil {
 		return nil, nil
 	}
-	out := map[netip.Addr]string{}
+	best := map[netip.Addr]probe.TSDevice{}
 	for _, dv := range data.Devices {
 		if len(dv.Tags) > 0 {
 			continue
 		}
 		for _, ip := range dv.PublicIPs {
-			if a, err := netip.ParseAddr(ip); err == nil {
-				out[a.Unmap()] = dv.Name
+			a, err := netip.ParseAddr(ip)
+			if err != nil {
+				continue
 			}
+			a = a.Unmap()
+			if b, ok := best[a]; !ok || dv.Connected && !b.Connected ||
+				dv.Connected == b.Connected && dv.LastSeen.After(b.LastSeen) {
+				best[a] = dv
+			}
+		}
+	}
+	out := map[netip.Addr]string{}
+	for a, dv := range best {
+		out[a] = dv.Name
+		if dv.Machine != "" {
+			out[a] = dv.Machine
 		}
 	}
 	return out, nil

@@ -1058,6 +1058,8 @@ pre.data {
 .link-crit .link-line { stroke: var(--crit); stroke-width: 3.5; animation: pulse 1.2s ease-in-out infinite; }
 .link-stale .link-line { stroke: var(--stale); stroke-dasharray: 6 6; }
 .link-none .link-line { stroke: var(--text-muted); stroke-opacity: 0.4; stroke-dasharray: 3 6; }
+/* Nothing open to the internet: healthy, but no traffic, so no flow. */
+.link-sealed .link-line { stroke-opacity: 0.25; animation: none; }
 
 .map-link:hover .link-line { stroke-width: 4; stroke-opacity: 1; }
 
@@ -1180,6 +1182,7 @@ pre.data {
 .lg-crit { border-color: var(--crit); }
 .lg-stale { border-color: var(--stale); border-top-style: dashed; }
 .lg-none { border-color: var(--text-muted); border-top-style: dotted; opacity: 0.5; }
+.lg-sealed { border-color: var(--ok); border-top-style: dotted; opacity: 0.3; }
 
 @media (prefers-reduced-motion: reduce) {
   .link-ok .link-line,
