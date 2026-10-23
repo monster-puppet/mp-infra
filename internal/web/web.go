@@ -332,6 +332,7 @@ type rowView struct {
 	Checks []checkView
 	Counts map[eval.State]int
 	Wide   bool // a group with many checks spans the whole grid row
+	Hidden int  // ok checks left out in the problems-only view
 }
 
 type homeData struct {
@@ -342,6 +343,40 @@ type homeData struct {
 	Map     *mapView
 	Groups  []rowView
 	Empty   bool
+	// Problems is the problems-only view: ok checks, cards left with nothing
+	// to show, and sections left with no cards are hidden.
+	Problems bool
+	Hidden   int // ok checks hidden
+}
+
+// viewCookie keeps the home page's all/problems choice. It is a display
+// preference, nothing more.
+const viewCookie = "mpinfra_view"
+
+// problemsOnly drops the ok checks from rows, and the rows left with nothing
+// that is not ok. It returns the rows kept and the number of checks dropped.
+func problemsOnly(rows []rowView) ([]rowView, int) {
+	var out []rowView
+	hidden := 0
+	for _, r := range rows {
+		var cs []checkView
+		for _, c := range r.Checks {
+			if c.Effective != eval.OK {
+				cs = append(cs, c)
+			}
+		}
+		r.Hidden = len(r.Checks) - len(cs)
+		hidden += r.Hidden
+		if len(cs) == 0 && r.State == eval.OK {
+			continue
+		}
+		r.Checks = cs
+		if r.Host == "" {
+			r.Wide = len(cs) >= wideGroup
+		}
+		out = append(out, r)
+	}
+	return out, hidden
 }
 
 // tailnetView lists the tailnet devices that are not configured hosts.
@@ -496,6 +531,17 @@ func sortRows(rows []rowView) {
 }
 
 func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
+	// ?view= sets the preference and redirects, so the page URL (and its
+	// refresh) stays plain "/".
+	if v := r.URL.Query().Get("view"); v != "" {
+		c := &http.Cookie{Name: viewCookie, Value: "problems", Path: "/", MaxAge: 365 * 24 * 3600, HttpOnly: true, SameSite: http.SameSiteLaxMode}
+		if v != "problems" {
+			c.Value, c.MaxAge = "", -1
+		}
+		http.SetCookie(rw, c)
+		http.Redirect(rw, r, "/", http.StatusSeeOther)
+		return
+	}
 	ctx := r.Context()
 	checks, err := w.srv.Store.Checks(ctx)
 	if err != nil {
@@ -557,13 +603,22 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 			d.Groups = append(d.Groups, row)
 		}
 	}
-	sortRows(d.Groups)
-	// Wide groups first, so the narrow ones after them fill whole rows.
-	sort.SliceStable(d.Groups, func(i, j int) bool { return d.Groups[i].Wide && !d.Groups[j].Wide })
 	counts := map[eval.State]int{}
 	for _, row := range d.Hosts {
 		d.Overall = eval.Worst(d.Overall, row.State)
 	}
+	if c, err := r.Cookie(viewCookie); err == nil && c.Value == "problems" {
+		d.Problems = true
+		var n int
+		d.Hosts, d.Hidden = problemsOnly(d.Hosts)
+		d.Groups, n = problemsOnly(d.Groups)
+		d.Hidden += n
+		// The device list carries no state, so there is nothing in it to show.
+		d.Tailnet = nil
+	}
+	sortRows(d.Groups)
+	// Wide groups first, so the narrow ones after them fill whole rows.
+	sort.SliceStable(d.Groups, func(i, j int) bool { return d.Groups[i].Wide && !d.Groups[j].Wide })
 	for _, c := range all {
 		d.Overall = eval.Worst(d.Overall, c.Effective)
 		counts[c.Effective]++

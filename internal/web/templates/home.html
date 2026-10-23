@@ -1,7 +1,13 @@
 {{define "content"}}{{with .Data}}
 <section class="overview state-{{.Overall}}">
   <h1>Infra watch</h1>
-  <p class="overall">{{template "badge" .Overall}} <span>{{if .Summary}}{{.Summary}}{{else}}no checks yet{{end}}</span></p>
+  <div class="overview-bar">
+    <p class="overall">{{template "badge" .Overall}} <span>{{if .Summary}}{{.Summary}}{{else}}no checks yet{{end}}</span></p>
+    <nav class="view-toggle" aria-label="Show">
+      <a href="/?view=all"{{if not .Problems}} class="active" aria-current="true"{{end}}>All</a>
+      <a href="/?view=problems"{{if .Problems}} class="active" aria-current="true"{{end}}>Problems only</a>
+    </nav>
+  </div>
 </section>
 
 {{with .Map}}
@@ -92,10 +98,12 @@
 </section>
 {{end}}
 
+{{if .Hosts}}
 <h2 class="section-title">Hosts</h2>
 <div class="grid grid-hosts">
 {{range .Hosts}}{{template "row" .}}{{end}}
 </div>
+{{end}}
 
 {{with .Tailnet}}
 <h2 class="section-title">Tailnet</h2>
@@ -118,6 +126,10 @@
 <div class="grid">
 {{range .Groups}}{{template "row" .}}{{end}}
 </div>
+{{end}}
+
+{{if and .Problems (not .Hosts) (not .Groups)}}
+<p class="card all-clear">Nothing needs attention.{{with .Hidden}} {{.}} ok check{{if ne . 1}}s{{end}} hidden.{{end}} <a href="/?view=all">Show all</a></p>
 {{end}}
 {{end}}{{end}}
 
@@ -147,8 +159,9 @@
       </a>
     </li>
   {{else}}
-    <li class="empty">no checks yet</li>
+    {{if not .Hidden}}<li class="empty">no checks yet</li>{{end}}
   {{end}}
+  {{with .Hidden}}<li class="hidden-note">{{.}} ok check{{if ne . 1}}s{{end}} hidden</li>{{end}}
   </ul>
 </article>
 {{end}}

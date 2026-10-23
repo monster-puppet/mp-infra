@@ -597,3 +597,48 @@ func TestNoticeAccept(t *testing.T) {
 		t.Error("accept offered for notice.jenkins.installed")
 	}
 }
+
+func TestProblemsOnly(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	for _, h := range []string{"monster-p4", "jenkins", "jenkins-win"} {
+		if rec := e.post("tok-"+h, body(h, "up 5s")); rec.Code != 204 {
+			t.Fatal(rec.Code, rec.Body.String())
+		}
+	}
+	e.srv.Store.PutCheck(ctx, store.Check{Host: "serve", ID: "notice.exe-dev", State: eval.Crit, Summary: "1 new notice", Data: `{}`}, now)
+	e.srv.Store.PutCheck(ctx, store.Check{Host: "serve", ID: "tls.example", State: eval.OK, Summary: "valid 80 d", Data: `{}`}, now)
+	e.srv.Store.PutCheck(ctx, store.Check{Host: "serve", ID: "ts.devices", State: eval.OK, Summary: "1 device",
+		Data: `{"devices":[{"name":"studio-mac","os":"macOS","connected":true}]}`}, now)
+
+	all := e.get("/").Body.String()
+	for _, want := range []string{`section-title">Hosts<`, `section-title">Tailnet<`, "Certificates", "Security notices"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("all view lacks %q", want)
+		}
+	}
+
+	rec := e.get("/?view=problems")
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/" {
+		t.Fatalf("set view: %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	cookie := rec.Result().Cookies()[0]
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(cookie)
+	out := httptest.NewRecorder()
+	e.ui.ServeHTTP(out, req)
+	h := out.Body.String()
+	if !strings.Contains(h, "Security notices") || !strings.Contains(h, "1 new notice") {
+		t.Error("problems view lacks the crit notice")
+	}
+	for _, gone := range []string{`section-title">Hosts<`, `section-title">Tailnet<`, "Certificates", "up 5s"} {
+		if strings.Contains(h, gone) {
+			t.Errorf("problems view shows %q", gone)
+		}
+	}
+
+	rec = e.get("/?view=all")
+	if c := rec.Result().Cookies(); len(c) != 1 || c[0].MaxAge >= 0 {
+		t.Errorf("view=all did not clear the cookie: %+v", c)
+	}
+}

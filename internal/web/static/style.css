@@ -321,6 +321,60 @@ form.nav-user {
   color: var(--text-muted);
 }
 
+/* Summary on the left, the All / Problems only switch on the right. */
+.overview-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.overview-bar .overall {
+  margin-top: 0;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.view-toggle a {
+  padding: 0.35rem 0.9rem;
+  border-radius: 9px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.2s, background 0.2s;
+}
+
+.view-toggle a:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.view-toggle a.active {
+  color: var(--on-primary);
+  background: var(--primary-fill);
+}
+
+.hidden-note {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding-top: 0.4rem;
+}
+
+.all-clear {
+  color: var(--text-muted);
+}
+
 .overall .badge {
   font-size: 1rem;
   padding: 0.3rem 0.9rem;
