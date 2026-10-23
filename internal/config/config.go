@@ -31,7 +31,10 @@ type Server struct {
 	ReportAddr string        `yaml:"report_addr"`
 	DB         string        `yaml:"db"`
 	StaleAfter time.Duration `yaml:"stale_after"`
-	Hosts      []Host        `yaml:"hosts"`
+	// EndpointStaleAfter replaces StaleAfter for endpoint hosts: a laptop that is
+	// switched off for a night or a weekend is not an incident.
+	EndpointStaleAfter time.Duration `yaml:"endpoint_stale_after"`
+	Hosts              []Host        `yaml:"hosts"`
 	// Links are the connections hosts make to each other, drawn on the network map.
 	Links           []Link `yaml:"links"`
 	ReportTokensEnv string `yaml:"report_tokens_env"`
@@ -92,6 +95,10 @@ type Host struct {
 	NotOnTailnet bool `yaml:"not_on_tailnet"`
 	// NoReport marks a host that runs no agent, so it never goes stale.
 	NoReport bool `yaml:"no_report"`
+	// Endpoint marks a workstation that reports through the MP Launcher. It is
+	// authenticated by its Tailscale address instead of a token, goes stale only
+	// after endpoint_stale_after, and gets no ts.online or ts.key_expiry check.
+	Endpoint bool `yaml:"endpoint"`
 }
 
 // Link is a connection one host is known to make to another. It is declared, not
@@ -125,6 +132,13 @@ type Thresholds struct {
 	// BruteForceActive is how many new failed logins between two reports of a
 	// host (normally 5 minutes apart) make an active brute force.
 	BruteForceActive int `yaml:"bruteforce_active"`
+
+	// Endpoint checks (endpoint.*), judged on the server from the facts a
+	// workstation reports.
+	EndpointAVSigDays      float64       `yaml:"endpoint_av_sig_days"`      // Defender signatures older than this warn
+	EndpointScreenLockSecs float64       `yaml:"endpoint_screen_lock_secs"` // a longer (or no) lock timeout warns
+	EndpointMinBuild       int           `yaml:"endpoint_min_build"`        // Windows builds below this are out of support: crit
+	EndpointUpdateAge      time.Duration `yaml:"endpoint_update_age"`       // no update installed for this long warns
 }
 
 type TLSTarget struct {
@@ -292,6 +306,9 @@ func LoadServer(path string) (*Server, error) {
 	if c.StaleAfter == 0 {
 		c.StaleAfter = 15 * time.Minute
 	}
+	if c.EndpointStaleAfter == 0 {
+		c.EndpointStaleAfter = 7 * 24 * time.Hour
+	}
 	if c.StaleAfter < time.Minute {
 		return nil, fmt.Errorf("%s: stale_after %s is too short", path, c.StaleAfter)
 	}
@@ -365,7 +382,7 @@ func CheckHostMeta(label, os string) error {
 }
 
 // OSList is the os values in the order the UI offers them.
-var OSList = []string{"rocky", "centos", "ubuntu", "debian", "dsm", "linux", "windows"}
+var OSList = []string{"rocky", "centos", "ubuntu", "debian", "dsm", "linux", "windows", "windows-client"}
 
 // OSNames maps the allowed values of a host's os to the name the UI shows.
 var OSNames = map[string]string{
@@ -376,6 +393,8 @@ var OSNames = map[string]string{
 	"debian":  "Debian",
 	"dsm":     "Synology DSM",
 	"windows": "Windows Server",
+	// A workstation, see Host.Endpoint.
+	"windows-client": "Windows",
 }
 
 // OSFamily is the icon family of an os value: "linux", "windows" or "".
@@ -383,6 +402,8 @@ func OSFamily(os string) string {
 	switch os {
 	case "windows", "":
 		return os
+	case "windows-client":
+		return "windows"
 	}
 	return "linux"
 }
@@ -455,6 +476,13 @@ func (c *Server) ApplyDefaults() {
 	if t.BruteForceActive <= 0 {
 		t.BruteForceActive = 30
 	}
+	deff(&t.EndpointAVSigDays, 3)
+	deff(&t.EndpointScreenLockSecs, 900)
+	if t.EndpointMinBuild <= 0 {
+		// Windows 11 25H2: 24H2 Home and Pro left servicing on 2026-10-13.
+		t.EndpointMinBuild = 26200
+	}
+	def(&t.EndpointUpdateAge, 45*24*time.Hour)
 	def(&c.Alerts.CritReminder, 12*time.Hour)
 	if c.Alerts.SMTPPort == 0 {
 		c.Alerts.SMTPPort = 587
@@ -513,6 +541,23 @@ func (c *Server) HostByName(name string) (Host, bool) {
 		}
 	}
 	return Host{}, false
+}
+
+// StaleAfterFor is how long a host may stay silent before it is stale.
+func (c *Server) StaleAfterFor(name string) time.Duration {
+	if c.IsEndpoint(name) {
+		if c.EndpointStaleAfter > 0 {
+			return c.EndpointStaleAfter
+		}
+		return 7 * 24 * time.Hour
+	}
+	return c.StaleAfter
+}
+
+// IsEndpoint reports whether name is a configured endpoint host.
+func (c *Server) IsEndpoint(name string) bool {
+	h, ok := c.HostByName(name)
+	return ok && h.Endpoint
 }
 
 // HasHost reports whether name is a configured host.

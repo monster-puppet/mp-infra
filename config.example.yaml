@@ -6,6 +6,7 @@ ui_addr: "TAILNET_IP:8098"      # UI, members only
 report_addr: "TAILNET_IP:8099"  # report API, all reporting hosts
 db: /var/lib/mp-infra/mpinfra.db
 stale_after: 15m
+endpoint_stale_after: 168h   # endpoint hosts (workstations): 7 days
 probe_interval: 5m
 base_url: "http://TAILNET_IP:8098"   # for links in alerts
 
@@ -35,6 +36,14 @@ hosts:
   #   public_ip: "PUBLIC_IP"
   #   expected_public_ports: [22, 1666]
   #   not_on_tailnet: true
+  # A workstation that reports through the MP Launcher: no token (the report API
+  # knows it by its tailnet address), stale only after endpoint_stale_after, no
+  # ts.online / ts.key_expiry. The tailnet device is matched by hostname, or map it
+  # under tailscale.devices.
+  # - name: tacco-pc
+  #   label: "Marcus's PC"
+  #   os: windows-client
+  #   endpoint: true
 
 # Connections hosts make to each other, drawn as arcs on the network map with an
 # arrow at the host connected to. They are declared here, not observed. check
@@ -67,6 +76,10 @@ thresholds:
   snapshot_crit_days: 60
   updates_crit_age: 336h        # 14 days
   bruteforce_active: 30         # new failed logins between two reports = active brute force
+  endpoint_av_sig_days: 3       # Defender signatures older than this warn
+  endpoint_screen_lock_secs: 900  # no screen lock within this warns
+  endpoint_min_build: 26200     # Windows 11 25H2; older builds are out of support: crit
+  endpoint_update_age: 1080h    # 45 days without an installed update warns
 
 tls:
   - name: code-review

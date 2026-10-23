@@ -175,6 +175,11 @@ func (p *Prober) evalTailscale(devices []tsDevice) []Check {
 		name := p.deviceName(h.Name)
 		known[name] = true
 		hostOf[name] = h.Name
+		if h.Endpoint {
+			// Workstations sleep and should keep key expiry on: being offline or
+			// expiring is normal for them. They still count as known devices.
+			continue
+		}
 		d, ok := byName[name]
 		if !ok {
 			out = append(out,

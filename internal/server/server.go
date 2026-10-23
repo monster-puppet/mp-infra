@@ -113,6 +113,8 @@ func (s *Server) applyRules(ctx context.Context, host string, c *store.Check, no
 		return s.bruteForceRule(ctx, host, c, now)
 	case strings.HasPrefix(c.ID, "auth.logins."):
 		return s.tailnetLoginsRule(ctx, c, now)
+	case strings.HasPrefix(c.ID, "endpoint."):
+		s.endpointRule(c, now)
 	}
 	return nil
 }
@@ -161,18 +163,12 @@ func (s *Server) tailnetLoginsRule(ctx context.Context, c *store.Check, now time
 // their Tailscale names. Devices behind one NAT share an address: the one
 // connected now names it, else the one seen last.
 func (s *Server) personalDeviceIPs(ctx context.Context) (map[netip.Addr]string, error) {
-	c, err := s.Store.Check(ctx, config.ServeHost, "ts.devices")
-	if err != nil || c == nil {
+	devices, err := s.tsDevices(ctx)
+	if err != nil {
 		return nil, err
 	}
-	var data struct {
-		Devices []probe.TSDevice `json:"devices"`
-	}
-	if json.Unmarshal([]byte(c.Data), &data) != nil {
-		return nil, nil
-	}
 	best := map[netip.Addr]probe.TSDevice{}
-	for _, dv := range data.Devices {
+	for _, dv := range devices {
 		if len(dv.Tags) > 0 {
 			continue
 		}
@@ -495,8 +491,11 @@ func (s *Server) Sweep(ctx context.Context) error {
 	}
 	var all []store.Transition
 	for _, h := range s.Cfg.Hosts {
-		if h.NoReport || !eval.IsStale(last[h.Name], now, s.Cfg.StaleAfter) {
+		if h.NoReport || !eval.IsStale(last[h.Name], now, s.Cfg.StaleAfterFor(h.Name)) {
 			continue
+		}
+		if h.Endpoint && last[h.Name].IsZero() {
+			continue // enrolled, waiting for the launcher's first report
 		}
 		summary := "never reported"
 		if !last[h.Name].IsZero() {

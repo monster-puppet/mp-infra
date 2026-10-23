@@ -15,6 +15,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"sort"
 	"strings"
@@ -248,17 +249,31 @@ func (w *Web) logged(h http.Handler) http.Handler {
 // --- report API ---
 
 func (w *Web) report(rw http.ResponseWriter, r *http.Request) {
-	tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	tok = strings.TrimSpace(tok)
-	if !ok || tok == "" {
-		http.Error(rw, "missing bearer token", http.StatusUnauthorized)
-		return
-	}
-	sum := sha256.Sum256([]byte(tok))
-	host, ok := w.srv.Tokens.Lookup(sum[:])
-	if !ok {
-		http.Error(rw, "unknown token", http.StatusUnauthorized)
-		return
+	var host string
+	endpoint := false
+	if r.Header.Get("Authorization") == "" {
+		// No token: only an endpoint host, identified by its tailnet address.
+		ap, err := netip.ParseAddrPort(r.RemoteAddr)
+		if err == nil {
+			host, endpoint = w.srv.EndpointHost(r.Context(), ap.Addr())
+		}
+		if !endpoint {
+			http.Error(rw, "missing bearer token", http.StatusUnauthorized)
+			return
+		}
+	} else {
+		tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		tok = strings.TrimSpace(tok)
+		if !ok || tok == "" {
+			http.Error(rw, "missing bearer token", http.StatusUnauthorized)
+			return
+		}
+		sum := sha256.Sum256([]byte(tok))
+		host, ok = w.srv.Tokens.Lookup(sum[:])
+		if !ok {
+			http.Error(rw, "unknown token", http.StatusUnauthorized)
+			return
+		}
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(rw, r.Body, report.MaxBody))
 	if err != nil {
@@ -274,6 +289,14 @@ func (w *Web) report(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("report for %q with %q's token refused", p.Host, host)
 		http.Error(rw, "token does not belong to this host", http.StatusForbidden)
 		return
+	}
+	if endpoint {
+		for _, c := range p.Checks {
+			if !server.EndpointCheckAllowed(c.ID) {
+				http.Error(rw, "endpoint hosts may not send "+c.ID, http.StatusForbidden)
+				return
+			}
+		}
 	}
 	switch err := w.srv.Ingest(r.Context(), host, body, p); {
 	case errors.Is(err, server.ErrTooSoon):
@@ -483,7 +506,7 @@ var groups = []struct {
 	{"Patches", []string{"os.security_updates.", "pkg.version."}},
 	{"Disks and snapshots", []string{"disk.", "snapshot."}},
 	{"Licences", []string{"p4.licence"}},
-	{"Security", []string{"auth.", "sec."}},
+	{"Security", []string{"auth.", "sec.", "endpoint."}},
 	{"Security notices", []string{"notice."}},
 	{"OpSec", []string{"opsec."}},
 	{"Monitor", []string{"serve."}},
@@ -575,12 +598,14 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 		switch {
 		case h.NoReport:
 			row.Note = "no agent"
+		case h.Endpoint && last[h.Name].IsZero():
+			row.Note = "waiting for the launcher's first report"
 		case last[h.Name].IsZero():
 			row.Note = "never reported"
 			row.State = eval.Worst(row.State, eval.Stale)
 		default:
 			row.Note = "reported " + ago(now, last[h.Name])
-			if eval.IsStale(last[h.Name], now, w.srv.Cfg.StaleAfter) {
+			if eval.IsStale(last[h.Name], now, w.srv.Cfg.StaleAfterFor(h.Name)) {
 				row.State = eval.Worst(row.State, eval.Stale)
 			}
 		}

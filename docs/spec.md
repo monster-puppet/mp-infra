@@ -81,6 +81,13 @@ server stores the payload as received and adds its own probe checks next to it.
 - **Per-host report tokens.** Each host has its own token. The server accepts a report
   only for the host that token belongs to, so a compromised host cannot fake another's
   state. Store only a hash of each token on the server.
+- **Endpoint hosts** (`endpoint: true`, workstations reporting through the MP Launcher)
+  carry no token: the launcher is shared through Perforce and cannot hold a secret. The
+  report API accepts a token-less report only from a tailnet address that the last
+  `ts.devices` probe maps to exactly one device of that endpoint host (a second device
+  renamed to the same hostname makes both refused), only for that host, and only
+  `endpoint.*` and `os.security_updates.*` checks. The client sends facts with state ok;
+  the server decides the state (§4 Endpoints).
 - **`jenkins-win` is untrusted** (`tag:ci-untrusted`). Its reports may be lies. Its
   critical checks (on the tailnet, agent online) must therefore also be confirmed by
   server-side probes (Tailscale API, Jenkins API), and those win when they disagree.
@@ -162,6 +169,23 @@ see deploy.md).
 | `smart.<host>` | report: `smartctl -H -A -i` per device. crit on a failed self-assessment, an attribute FAILING_NOW, or pending (197) or uncorrectable (198) sectors; warn on reallocated sectors (5) or an unreadable drive. Attributes are matched by number |
 | `ts.devices` | Tailscale API: devices not in the expected list, or not seen for 30 days |
 | `opsec.items` | Notion OpSec checklist (read-only Notion token), count of open items |
+
+### Endpoints (workstations)
+
+Hosts with `endpoint: true` report through the MP Launcher every 4 h while it runs, as
+the logged-in user (no admin, no agent install). They go stale only after
+`endpoint_stale_after` (default 7 days), never while waiting for their first report,
+and get no `ts.online` / `ts.key_expiry` checks. The server sets each state from the
+reported facts, with thresholds under `thresholds.endpoint_*`.
+
+| id | Facts | ok / warn / crit |
+|---|---|---|
+| `endpoint.bitlocker.<host>` | Shell `System.Volume.BitLockerProtection` of the system drive | on / unknown or encrypting / off, suspended or decrypting |
+| `endpoint.av.<host>` | `root\SecurityCenter2` products (productState), `Get-MpComputerStatus` | an enabled product, up to date / signatures out of date or older than `endpoint_av_sig_days` (3), Defender tamper protection off / no enabled product, or active Defender with real-time protection off |
+| `endpoint.firewall.<host>` | `Get-NetFirewallProfile`, SecurityCenter2 firewall products | all profiles on or a third-party firewall / a profile off / — |
+| `endpoint.boot.<host>` | `SecureBoot\State`, `tpmtool getdeviceinformation` | Secure Boot on and TPM 2.0 / otherwise / — |
+| `endpoint.screenlock.<host>` | `InactivityTimeoutSecs` policy, else the user's screensaver with sign-in | lock within `endpoint_screen_lock_secs` (900) / longer or none / — |
+| `endpoint.os.<host>` | build, UBR, newest `Get-HotFix`, reboot-pending keys | supported and updated / no update for `endpoint_update_age` (45 d) or reboot pending / build below `endpoint_min_build` (26200, Windows 11 25H2) |
 
 ### Security notices
 

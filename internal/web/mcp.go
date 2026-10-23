@@ -376,7 +376,8 @@ func (w *Web) mcpHosts(r *http.Request) ([]mcpHost, error) {
 			m.LastReport = &u
 		}
 		m.Reported = ago(now, last[h.Name])
-		if !h.NoReport && (last[h.Name].IsZero() || eval.IsStale(last[h.Name], now, w.srv.Cfg.StaleAfter)) {
+		waiting := h.Endpoint && last[h.Name].IsZero()
+		if !h.NoReport && !waiting && (last[h.Name].IsZero() || eval.IsStale(last[h.Name], now, w.srv.Cfg.StaleAfterFor(h.Name))) {
 			m.Stale, m.Worst = true, eval.Stale
 		}
 		for _, c := range checks {
