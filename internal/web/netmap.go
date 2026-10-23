@@ -111,6 +111,9 @@ type mapDevice struct {
 	Logo  string // windows, apple, linux, android or ""
 	Name  string
 	Title string
+	// An endpoint host's state colours the icon, and the icon links to its checks.
+	State eval.State
+	Href  string
 }
 
 type mapView struct {
@@ -417,6 +420,9 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 	failed, recent, timed := 0, 0, true
 	banned, bans, banHosts := 0, 0, []string{}
 	for _, h := range hosts {
+		if h.Endpoint {
+			continue // a workstation: drawn as a device in the tailnet bubble
+		}
 		nd := mapNode{Name: h.DisplayName(), Host: h.Name, OS: config.OSFamily(h.OS), State: state[h.Name],
 			Href: "/history?host=" + h.Name}
 		var in, ts []checkView
@@ -526,12 +532,13 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 				shape = "monitor"
 			}
 			title := d.Name
-			for _, s := range []string{d.OSName, d.Addr, d.Tags} {
+			for _, s := range []string{d.OSName, d.Addr, d.Tags, d.Problem} {
 				if s != "" {
 					title += " · " + s
 				}
 			}
-			m.Devices = append(m.Devices, mapDevice{Shape: shape, Logo: d.Logo, Name: clipRunes(d.Name, 10), Title: title})
+			m.Devices = append(m.Devices, mapDevice{Shape: shape, Logo: d.Logo, Name: clipRunes(d.Name, 10), Title: title,
+				State: d.State, Href: d.Href})
 		}
 	}
 	m.layout()

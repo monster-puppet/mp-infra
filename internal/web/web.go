@@ -424,7 +424,8 @@ func problemsOnly(rows []rowView) ([]rowView, int) {
 	return out, hidden
 }
 
-// tailnetView lists the tailnet devices that are not configured hosts.
+// tailnetView lists the tailnet devices that are not server hosts: personal
+// devices, and workstations that are endpoint hosts.
 type tailnetView struct {
 	Online  []deviceView
 	Offline []deviceView
@@ -439,6 +440,12 @@ type deviceView struct {
 	Addr   string
 	Tags   string
 	Seen   string
+	// Set for an endpoint host: its name, its row's state, a link to its checks
+	// and what is wrong ("Secure Boot off"), or "" when all is well.
+	Host    string
+	State   eval.State
+	Href    string
+	Problem string
 }
 
 // deviceFamily maps a Tailscale device OS to an icon family.
@@ -481,7 +488,7 @@ func deviceOSName(os string) string {
 }
 
 // tailnet builds the device list from the data of the ts.devices check.
-func tailnet(c checkView, now time.Time) *tailnetView {
+func tailnet(c checkView, now time.Time, endpoint func(host string) bool) *tailnetView {
 	var data struct {
 		Devices []probe.TSDevice `json:"devices"`
 	}
@@ -500,10 +507,11 @@ func tailnet(c checkView, now time.Time) *tailnetView {
 	})
 	t := &tailnetView{Age: c.Age}
 	for _, d := range data.Devices {
-		if d.Host != "" {
-			continue
+		if d.Host != "" && !endpoint(d.Host) {
+			continue // a server: drawn as a host on the map
 		}
-		v := deviceView{Name: d.Name, OS: deviceFamily(d.OS), Logo: deviceLogo(d.OS), OSName: deviceOSName(d.OS), Addr: d.Addr, Tags: strings.Join(d.Tags, " ")}
+		v := deviceView{Name: d.Name, OS: deviceFamily(d.OS), Logo: deviceLogo(d.OS), OSName: deviceOSName(d.OS), Addr: d.Addr, Tags: strings.Join(d.Tags, " "),
+			Host: d.Host}
 		if d.Connected {
 			t.Online = append(t.Online, v)
 			continue
@@ -512,6 +520,40 @@ func tailnet(c checkView, now time.Time) *tailnetView {
 		t.Offline = append(t.Offline, v)
 	}
 	return t
+}
+
+// markEndpoints gives each endpoint device its host row's state, a link to the
+// row and the summary of its worst check.
+func (t *tailnetView) markEndpoints(rows []rowView) {
+	if t == nil {
+		return
+	}
+	byHost := map[string]rowView{}
+	for _, r := range rows {
+		if r.Host != "" {
+			byHost[r.Host] = r
+		}
+	}
+	mark := func(ds []deviceView) {
+		for i := range ds {
+			r, ok := byHost[ds[i].Host]
+			if ds[i].Host == "" || !ok {
+				continue
+			}
+			ds[i].State, ds[i].Href = r.State, r.Link
+			worst := eval.OK
+			for _, c := range r.Checks {
+				if c.Effective != eval.OK && eval.Worst(worst, c.Effective) != worst {
+					worst, ds[i].Problem = c.Effective, c.Summary
+				}
+			}
+			if ds[i].Problem == "" && r.State != eval.OK {
+				ds[i].Problem = r.Note
+			}
+		}
+	}
+	mark(t.Online)
+	mark(t.Offline)
 }
 
 // groups are the cross-host rows on the home page, by check id prefix.
@@ -607,7 +649,7 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 		byHost[c.Host] = append(byHost[c.Host], v)
 		all = append(all, v)
 		if c.Host == config.ServeHost && c.ID == "ts.devices" {
-			d.Tailnet = tailnet(v, now)
+			d.Tailnet = tailnet(v, now, w.srv.Cfg.IsEndpoint)
 		}
 	}
 	hosts := w.hosts()
@@ -632,6 +674,7 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 		}
 		d.Hosts = append(d.Hosts, row)
 	}
+	d.Tailnet.markEndpoints(d.Hosts)
 	d.Map = buildMap(hosts, w.srv.Cfg.Links, d.Hosts, all, d.Tailnet)
 	sortRows(d.Hosts)
 	for _, g := range groups {

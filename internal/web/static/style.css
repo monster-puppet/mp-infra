@@ -1067,6 +1067,13 @@ pre.data {
 .map-device:hover .map-icon { stroke-opacity: 1; stroke-width: 2.6; }
 .device-hit { fill: transparent; stroke: none; }
 .device-logo { fill: var(--ok); stroke: none; }
+/* Endpoint hosts (workstations) take their checks' state. */
+.map-device.device-warn .map-icon { stroke: var(--warn); }
+.map-device.device-warn .device-logo { fill: var(--warn); }
+.map-device.device-crit .map-icon { stroke: var(--crit); }
+.map-device.device-crit .device-logo { fill: var(--crit); }
+.map-device.device-stale .map-icon { stroke: var(--stale); }
+.map-device.device-stale .device-logo { fill: var(--stale); }
 .device-logo .logo-cut { fill: var(--bg); }
 .device-logo .logo-stroke { fill: none; stroke: var(--ok); stroke-width: 2.4; stroke-linecap: round; }
 .device-label {

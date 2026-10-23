@@ -91,3 +91,39 @@ func TestWhoami(t *testing.T) {
 		}
 	}
 }
+
+// An endpoint host is drawn in the tailnet bubble, coloured by its checks and
+// linked to them, not as a host on the map.
+func TestHomeDrawsEndpointsInTailnet(t *testing.T) {
+	e := setup(t)
+	e.srv.Cfg.Hosts = append(e.srv.Cfg.Hosts, config.Host{Name: "rchau-pc", Label: "Ricky's PC", Endpoint: true})
+	ctx := context.Background()
+	d, _ := json.Marshal(map[string]any{"devices": []probe.TSDevice{
+		{Name: "pet_computer", Machine: "rchau-pc", OS: "windows", Addr: "100.64.0.11", Connected: true, LastSeen: now, Host: "rchau-pc"},
+		{Name: "jenkins", Machine: "jenkins", OS: "linux", Addr: "100.64.0.12", Connected: true, LastSeen: now, Host: "jenkins"},
+	}})
+	for _, c := range []store.Check{
+		{Host: config.ServeHost, ID: "ts.devices", State: eval.OK, Data: string(d)},
+		{Host: "rchau-pc", ID: "endpoint.boot.rchau-pc", State: eval.Warn, Summary: "Secure Boot off", Data: "{}"},
+		{Host: "rchau-pc", ID: "report.fresh", State: eval.OK, Summary: "reported", Data: "{}"},
+	} {
+		if _, err := e.srv.Store.PutCheck(ctx, c, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	body := e.get("/").Body.String()
+	for _, want := range []string{
+		`<a href="/history?host=rchau-pc"><g class="map-device device-warn"><title>rchau-pc · Windows · 100.64.0.11 · Secure Boot off</title>`,
+		`class="device-label">rchau-pc</text>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("home page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, `class="device-label">jenkins</text>`) {
+		t.Error("server host drawn as a tailnet device")
+	}
+	if strings.Contains(body, `<a href="/history?host=rchau-pc" class="map-node`) {
+		t.Error("endpoint drawn as a host node")
+	}
+}

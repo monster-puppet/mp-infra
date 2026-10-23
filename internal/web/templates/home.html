@@ -49,7 +49,7 @@
       <rect x="{{sub .W 178}}" y="12" width="150" height="{{sub .H 24}}" rx="75"/>
       <text x="{{sub .W 103}}" y="{{.TailnetY}}" class="bubble-name">Tailnet</text>
     </g>
-    {{range .Devices}}<g class="map-device"><title>{{.Title}}</title>{{template "deviceicon" .}}<text x="{{.X}}" y="{{add .Y 25}}" class="device-label">{{.Name}}</text></g>{{end}}
+    {{range .Devices}}{{if .Href}}<a href="{{.Href}}">{{end}}<g class="map-device{{with .State}} device-{{.}}{{end}}"><title>{{.Title}}</title>{{template "deviceicon" .}}<text x="{{.X}}" y="{{add .Y 25}}" class="device-label">{{.Name}}</text></g>{{if .Href}}</a>{{end}}{{end}}
     {{template "badges" .MoreDevices}}
     {{range .Nodes}}{{template "maplink" .Internet}}{{template "maplink" .Tailnet}}{{end}}
     {{range .Links}}{{template "hostlink" .}}{{end}}
@@ -152,8 +152,8 @@
 {{define "device"}}
 <li class="device{{if .Seen}} device-off{{end}}">
   {{template "osicon" .}}
-  <span class="device-name">{{.Name}}</span>
-  <span class="device-meta">{{with .OSName}}{{.}}{{end}}{{with .Addr}} · <span class="mono">{{.}}</span>{{end}}{{with .Tags}} · {{.}}{{end}}{{with .Seen}} · {{.}}{{end}}</span>
+  <span class="device-name">{{if .Href}}<a href="{{.Href}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}{{with .State}} <span class="dot dot-{{.}}" title="{{.}}"></span>{{end}}</span>
+  <span class="device-meta">{{with .OSName}}{{.}}{{end}}{{with .Addr}} · <span class="mono">{{.}}</span>{{end}}{{with .Tags}} · {{.}}{{end}}{{with .Seen}} · {{.}}{{end}}{{with .Problem}} · {{.}}{{end}}</span>
 </li>
 {{end}}
 
