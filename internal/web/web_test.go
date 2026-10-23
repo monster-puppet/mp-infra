@@ -558,6 +558,51 @@ func TestNetMapFailed4h(t *testing.T) {
 	}
 }
 
+func TestNetMapFail2ban(t *testing.T) {
+	hosts := []config.Host{{Name: "a", PublicIP: "192.0.2.1"}, {Name: "b", PublicIP: "192.0.2.2"}, {Name: "c", PublicIP: "192.0.2.3"}}
+	cv := func(host, id string, s eval.State, data string) checkView {
+		return checkView{Check: store.Check{Host: host, ID: id, State: s, Summary: id, Data: data}, Effective: s}
+	}
+	all := []checkView{
+		cv("a", "auth.failures.a", eval.OK, `{"total":100}`),
+		cv("a", "sec.fail2ban.a", eval.OK, `{"running":true,"banned_now":1041,"bans_24h":12}`),
+		cv("b", "sec.fail2ban.b", eval.OK, `{"running":true,"banned_now":9,"bans_24h":3}`),
+		cv("c", "sec.fail2ban.c", eval.Warn, `{"running":false,"banned_now":0,"bans_24h":0}`),
+		cv("c", "ports.public.c", eval.OK, `{"open":[22],"expected":[22]}`),
+	}
+	m := buildMap(hosts, nil, nil, all, nil)
+	if m.Banned != "1,050" || m.Bans24h != "15" || !strings.Contains(m.BannedTitle, "a: 1,041 banned, 12 new in 24 h") {
+		t.Errorf("totals: %q %q %q", m.Banned, m.Bans24h, m.BannedTitle)
+	}
+	// The shield appears only where fail2ban is not ok, and colours the line.
+	if m.Nodes[0].Internet.Shield != nil || m.Nodes[1].Internet.Shield != nil {
+		t.Errorf("shield on a healthy host")
+	}
+	c := m.Nodes[2].Internet
+	if c.Shield == nil || c.Shield.Icon != "shield" || c.Shield.Class != "warn" || c.State != "warn" || c.Alert != nil {
+		t.Errorf("c: %+v shield %+v", c, c.Shield)
+	}
+	if b := c.narrowBadge(0, 0); len(b) != 1 || b[0].Icon != "shield" {
+		t.Errorf("narrow: %+v", b)
+	}
+	// No host reports fail2ban: nothing in the bubble.
+	if m := buildMap(hosts, nil, nil, all[:1], nil); m.Banned != "" {
+		t.Errorf("no reports: %q", m.Banned)
+	}
+
+	e := setup(t)
+	rep := fmt.Sprintf(`{"host":"jenkins","agent_version":"1","collected_at":%q,"checks":[`+
+		`{"id":"auth.failures.jenkins","state":"ok","summary":"5 failed","data":{"total":5}},`+
+		`{"id":"sec.fail2ban.jenkins","state":"ok","summary":"49 banned","data":{"running":true,"banned_now":49,"bans_24h":7}}]}`,
+		e.clock.Format(time.RFC3339))
+	if rec := e.post("tok-jenkins", rep); rec.Code != http.StatusNoContent {
+		t.Fatalf("post: %d %s", rec.Code, rec.Body)
+	}
+	if h := e.get("/").Body.String(); !strings.Contains(h, ">banned now<") || !strings.Contains(h, ">+7 in 24 h<") || !strings.Contains(h, ">49<") {
+		t.Errorf("home lacks the banned block")
+	}
+}
+
 func TestMetersAndChart(t *testing.T) {
 	e := setup(t)
 	disk := func(pct float64) string {

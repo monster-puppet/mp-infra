@@ -58,3 +58,7 @@ logins:
 # in the UI. Listening TCP ports: a change is warn until accepted.
 accounts: true
 listeners: true
+
+# sec.fail2ban: is fail2ban running with an sshd jail; banned now and new bans in
+# 24 h, summed in the internet bubble of the network map. Needs root.
+fail2ban: {}

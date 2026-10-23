@@ -205,6 +205,39 @@ func collectors(cfg *config.Agent) []collector {
 			return []Check{smartCheck(id, disks)}, nil
 		}})
 	}
+	if f := cfg.Fail2ban; f != nil {
+		id := "sec.fail2ban." + cfg.Host
+		cs = append(cs, collector{id: id, onError: eval.Warn, run: func(ctx context.Context) ([]Check, error) {
+			client := func(args ...string) (string, error) {
+				return run(ctx, append(append([]string{}, f.Client...), args...), nil)
+			}
+			out, err := client("status")
+			if err != nil {
+				return []Check{fail2banCheck(id, false, nil, 0, 0, err.Error())}, nil
+			}
+			var jails []f2bJail
+			for _, name := range parseF2BJails(out) {
+				s, err := client("status", name)
+				if err != nil {
+					return nil, err
+				}
+				jails = append(jails, parseF2BJail(name, s))
+			}
+			banned := 0
+			if b, err := client("banned"); err == nil {
+				banned = parseF2BBanned(b)
+			} else { // fail2ban before 0.11: no "banned"; sum the jails
+				for _, j := range jails {
+					banned += j.BannedNow
+				}
+			}
+			bans := 0
+			if log, err := tail(f.Log, 4<<20); err == nil {
+				bans = countF2BBans(strings.NewReader(log), time.Now().Add(-24*time.Hour), time.Local)
+			}
+			return []Check{fail2banCheck(id, true, jails, banned, bans, "")}, nil
+		}})
+	}
 	if w := cfg.Windows; w != nil {
 		cs = append(cs, windowsCollectors(w)...)
 	}

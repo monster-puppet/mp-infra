@@ -21,14 +21,24 @@
       <title>Internet</title>
       <rect x="28" y="12" width="150" height="{{sub .H 24}}" rx="75"/>
       {{if .Failed}}
-      {{template "globe" (badge 103 (sub (half .H) 56))}}
-      <text x="103" y="{{sub (half .H) 8}}" class="bubble-name">Internet</text>
-      <text x="103" y="{{add (half .H) 30}}" class="inet-failed failed-{{.FailedClass}}">{{.Failed}}</text>
-      <text x="103" y="{{add (half .H) 48}}" class="bubble-note">failed logins</text>
-      <text x="103" y="{{add (half .H) 63}}" class="bubble-note">last 24 h</text>
+      {{/* With the fail2ban block the stack moves up 36 to stay inside the bubble's round ends. */}}
+      {{$c := half .H}}{{if .Banned}}{{$c = sub (half .H) 36}}{{end}}
+      {{template "globe" (badge 103 (sub $c 56))}}
+      <text x="103" y="{{sub $c 8}}" class="bubble-name">Internet</text>
+      <text x="103" y="{{add $c 30}}" class="inet-failed failed-{{.FailedClass}}">{{.Failed}}</text>
+      <text x="103" y="{{add $c 48}}" class="bubble-note">failed logins</text>
+      <text x="103" y="{{add $c 63}}" class="bubble-note">last 24 h</text>
       {{with .Failed4h}}
-      <text x="103" y="{{add (half $.Data.Map.H) 92}}" class="inet-failed inet-failed-small">{{.}}</text>
-      <text x="103" y="{{add (half $.Data.Map.H) 108}}" class="bubble-note">last 4 h</text>
+      <text x="103" y="{{add $c 92}}" class="inet-failed inet-failed-small">{{.}}</text>
+      <text x="103" y="{{add $c 108}}" class="bubble-note">last 4 h</text>
+      {{end}}
+      {{with .Banned}}
+      <g class="inet-banned"><title>{{$.Data.Map.BannedTitle}}</title>
+      {{template "shieldicon" (badge 82 (add $c 136))}}
+      <text x="111" y="{{add $c 142}}" class="inet-failed inet-failed-small">{{.}}</text>
+      <text x="103" y="{{add $c 158}}" class="bubble-note">banned now</text>
+      <text x="103" y="{{add $c 173}}" class="bubble-note">+{{$.Data.Map.Bans24h}} in 24 h</text>
+      </g>
       {{end}}
       {{else}}
       {{template "globe" (badge 103 (sub (half .H) 16))}}
@@ -67,7 +77,7 @@
       {{template "glow" (glowArgs "glow-narrow" .NW .NH)}}
     </defs>
     <g class="bubble bubble-internet">
-      <title>Internet</title>
+      <title>Internet{{with .Banned}} · {{.}} banned now, +{{$.Data.Map.Bans24h}} in 24 h{{end}}</title>
       <rect x="12" y="10" width="{{sub .NW 24}}" height="68" rx="34"/>
       {{if .Failed}}
       {{template "globe" (badge (sub (half .NW) 110) 44)}}
@@ -199,4 +209,6 @@
 {{define "attackicon"}}<g class="map-badge mb-active"><circle cx="{{.X}}" cy="{{.Y}}" r="13" class="badge-bg"/>{{template "mapicon" .}}</g>{{end}}
 
 {{/* Icons on a 24-unit grid, drawn at 0.65 around the badge centre. */}}
-{{define "mapicon"}}<g class="map-icon" transform="translate({{sub .X 7.8}} {{sub .Y 7.8}}) scale(0.65)">{{if eq .Icon "link"}}<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>{{else if eq .Icon "clock"}}<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>{{else if eq .Icon "x"}}<path d="M18 6 6 18M6 6l12 12"/>{{else if eq .Icon "lock"}}<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>{{else if eq .Icon "alert"}}<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/>{{else if eq .Icon "target"}}<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M22 12h-4M6 12H2M12 6V2M12 22v-4"/>{{else}}<path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>{{end}}</g>{{end}}
+{{/* The fail2ban shield next to the banned count in the internet bubble. */}}
+{{define "shieldicon"}}<g class="globe" transform="translate({{sub .X 9}} {{sub .Y 9}}) scale(0.75)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></g>{{end}}
+{{define "mapicon"}}<g class="map-icon" transform="translate({{sub .X 7.8}} {{sub .Y 7.8}}) scale(0.65)">{{if eq .Icon "link"}}<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>{{else if eq .Icon "clock"}}<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>{{else if eq .Icon "x"}}<path d="M18 6 6 18M6 6l12 12"/>{{else if eq .Icon "lock"}}<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>{{else if eq .Icon "alert"}}<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/>{{else if eq .Icon "target"}}<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M22 12h-4M6 12H2M12 6V2M12 22v-4"/>{{else if eq .Icon "shield"}}<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v4M12 16h.01"/>{{else}}<path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>{{end}}</g>{{end}}

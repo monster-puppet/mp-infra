@@ -613,7 +613,14 @@ type Agent struct {
 	Listeners       bool           `yaml:"listeners"` // sec.listeners: listening TCP ports
 	RAID            *RAID          `yaml:"raid"`      // raid.<host>: Linux md arrays from /proc/mdstat
 	SMART           *SMART         `yaml:"smart"`     // smart.<host>: drive health from smartctl
+	Fail2ban        *Fail2ban      `yaml:"fail2ban"`  // sec.fail2ban.<host>: running, banned now, bans in 24 h
 	Windows         *WindowsChecks `yaml:"windows"`
+}
+
+// Fail2ban reads fail2ban's state; `fail2ban: {}` takes the defaults.
+type Fail2ban struct {
+	Client []string `yaml:"client"` // default ["fail2ban-client"]
+	Log    string   `yaml:"log"`    // default /var/log/fail2ban.log
 }
 
 // RAID reads the Linux md arrays (Synology SHR and RAID are md arrays too).
@@ -776,6 +783,14 @@ func LoadAgent(path string) (*Agent, error) {
 	for _, cmd := range []*Command{c.P4License, c.Firewall, c.SSHD} {
 		if cmd != nil && len(cmd.Cmd) == 0 {
 			return nil, fmt.Errorf("%s: p4_license, firewall and sshd need a cmd", path)
+		}
+	}
+	if f := c.Fail2ban; f != nil {
+		if len(f.Client) == 0 {
+			f.Client = []string{"fail2ban-client"}
+		}
+		if f.Log == "" {
+			f.Log = "/var/log/fail2ban.log"
 		}
 	}
 	if c.RAID != nil && c.RAID.Path == "" {

@@ -22,7 +22,7 @@ import (
 
 // Which checks colour which line.
 var (
-	internetChecks = []string{"ports.public.", "auth.", "win.fw.", "fw.rules.", "ssh.auth."}
+	internetChecks = []string{"ports.public.", "auth.", "win.fw.", "fw.rules.", "ssh.auth.", "sec.fail2ban."}
 	tailnetChecks  = []string{"ts.online.", "ts.key_expiry.", "win.tailscale_service"}
 )
 
@@ -40,6 +40,9 @@ type mapLink struct {
 	Icon  string     // tailnet: link, clock, x or question
 	Ports []portChip // internet: the public ports
 	Alert *mapBadge  // internet: a login or firewall problem
+	// Shield: internet, only when sec.fail2ban is not ok (fail2ban down, SSH
+	// without ban protection). Healthy fail2ban shows in the bubble, not here.
+	Shield *mapBadge
 	// Badges are the above, placed on the line by layout.
 	Badges []mapBadge
 }
@@ -124,6 +127,10 @@ type mapView struct {
 	// Failed4h is the same over the last 4 h, "" unless every host that counts
 	// failed logins also reports a 4 h count.
 	Failed4h string
+	// Banned is the number of addresses fail2ban bans now across all hosts that
+	// report sec.fail2ban, Bans24h the new bans in 24 h; both "" when none report.
+	// BannedTitle breaks them down per host for the tooltip.
+	Banned, Bans24h, BannedTitle string
 	// Wide layout: networks left and right of a host column.
 	W, H float64
 	// Narrow layout (phones): networks above and below a row of hosts.
@@ -304,6 +311,9 @@ func (l mapLink) wideBadges(x, y float64) []mapBadge {
 	if l.Alert != nil {
 		bs = append(bs, *l.Alert)
 	}
+	if l.Shield != nil {
+		bs = append(bs, *l.Shield)
+	}
 	ports := l.Ports
 	more := 0
 	if len(ports) > maxChips {
@@ -348,6 +358,8 @@ func (l mapLink) narrowBadge(x, y float64) []mapBadge {
 	switch {
 	case l.Alert != nil:
 		b.Icon, b.Class = l.Alert.Icon, l.Alert.Class
+	case l.Shield != nil:
+		b.Icon, b.Class, b.Title, b.Href = "shield", l.Shield.Class, l.Shield.Title, l.Shield.Href
 	case l.Icon == "":
 		open, bad := 0, 0
 		for _, p := range l.Ports {
@@ -403,6 +415,7 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 	}
 	m := &mapView{}
 	failed, recent, timed := 0, 0, true
+	banned, bans, banHosts := 0, 0, []string{}
 	for _, h := range hosts {
 		nd := mapNode{Name: h.DisplayName(), Host: h.Name, OS: config.OSFamily(h.OS), State: state[h.Name],
 			Href: "/history?host=" + h.Name}
@@ -413,6 +426,18 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 			}
 			if hasPrefix(c.ID, internetChecks) {
 				in = append(in, c)
+				if strings.HasPrefix(c.ID, "sec.fail2ban.") {
+					var d struct {
+						Running   bool `json:"running"`
+						BannedNow int  `json:"banned_now"`
+						Bans24h   int  `json:"bans_24h"`
+					}
+					if json.Unmarshal([]byte(c.Data), &d) == nil && d.Running && d.BannedNow >= 0 && d.Bans24h >= 0 {
+						banned += d.BannedNow
+						bans += d.Bans24h
+						banHosts = append(banHosts, fmt.Sprintf("%s: %s banned, %s new in 24 h", nd.Name, thousands(d.BannedNow), thousands(d.Bans24h)))
+					}
+				}
 				if strings.HasPrefix(c.ID, "auth.failures.") {
 					var d struct {
 						Total int `json:"total"`
@@ -488,6 +513,10 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 				m.FailedClass = nd.FailedState
 			}
 		}
+	}
+	if len(banHosts) > 0 {
+		m.Banned, m.Bans24h = thousands(banned), thousands(bans)
+		m.BannedTitle = "fail2ban\n" + strings.Join(banHosts, "\n")
 	}
 	m.Links = hostLinks(m.Nodes, links, all)
 	if tn != nil {
@@ -615,6 +644,12 @@ func internetLink(on bool, cs []checkView) mapLink {
 		// Shown on the SSH port's chip, not as an alert; it still colours the line.
 		if strings.HasPrefix(c.ID, "ssh.auth.") {
 			ssh = &cs[i]
+			continue
+		}
+		if strings.HasPrefix(c.ID, "sec.fail2ban.") {
+			if c.Effective != eval.OK {
+				l.Shield = &mapBadge{Icon: "shield", Class: string(c.Effective), Title: c.Summary, Href: checkURL(c.Host, c.ID)}
+			}
 			continue
 		}
 		if c.Effective != eval.OK && (problem == nil || c.Effective.Severity() > problem.Effective.Severity()) {
