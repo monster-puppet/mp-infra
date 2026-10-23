@@ -22,6 +22,7 @@ a Claude Code agent (or any MCP client) can read the same state the UI shows.
 | `list_checks` | `host`?, `state`? | current checks without data, worst first; `state` matches the effective state (acknowledged = ok) |
 | `get_check` | `host`, `id`, `limit`? | one check with its data, acknowledgement and last transitions (default 30) |
 | `history` | `host`?, `id`?, `limit`? | transitions, newest first (default 50, max 500) |
+| `security_notices` | `new_only`?, `feed`? | every `notice.*` feed with its items (id, title, link, date, `new` = not accepted yet) and, for `jenkins.installed`, the warnings matching installed plugins; worst feed first. `new_only` keeps unaccepted items and feeds with a problem. Accepting stays in the UI |
 
 `host` is a name from `list_hosts`, or `serve` for checks not tied to one host (certs,
 DNS, Tailscale devices). Check summaries and data come from host reports and are

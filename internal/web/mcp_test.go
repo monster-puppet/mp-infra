@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/monster-puppet/mp-infra/internal/config"
+	"github.com/monster-puppet/mp-infra/internal/eval"
+	"github.com/monster-puppet/mp-infra/internal/store"
 )
 
 func mcpEnv(t *testing.T) (*env, http.Handler) {
@@ -223,6 +226,74 @@ func TestMCPTools(t *testing.T) {
 		if r := tool(t, h, bad.name, bad.args, nil); r.Error != nil || !r.Result.IsError {
 			t.Errorf("%s %s: want a tool error, got %+v", bad.name, bad.args, r)
 		}
+	}
+}
+
+func TestMCPSecurityNotices(t *testing.T) {
+	e, h := mcpEnv(t)
+	ctx := context.Background()
+	put := func(host, id string, s eval.State, data string) {
+		if _, err := e.srv.Store.PutCheck(ctx, store.Check{Host: host, ID: id, State: s, Summary: id, Data: data}, *e.clock); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("serve", "notice.php", eval.OK, `{"items":[{"id":"8.3.36","title":"PHP 8.3.36 released!","link":"https://www.php.net/","date":"2026-10-21T00:00:00Z"}],"new":0}`)
+	put("serve", "notice.tailscale", eval.Crit, `{"items":[{"id":"TS-2026-013","title":"Leaked private keys","new":true},{"id":"TS-2026-012","title":"libtailscale bug"}],"new":1}`)
+	put("serve", "notice.letsencrypt", eval.Warn, `{"items":[],"new":0,"error":"GET: 503"}`)
+	put("jenkins", "notice.jenkins.installed", eval.Crit, `{"matches":[{"id":"SECURITY-1","name":"git","version":"1.0"}],"installed":90,"warnings":1500}`)
+	put("serve", "ts.api", eval.OK, `{}`) // not a notice
+
+	type feed struct {
+		Feed    string `json:"feed"`
+		State   string `json:"state"`
+		New     int    `json:"new"`
+		Error   string `json:"error"`
+		Matches []any  `json:"matches"`
+		Items   []struct {
+			ID   string  `json:"id"`
+			Link string  `json:"link"`
+			Date *string `json:"date"`
+			New  bool    `json:"new"`
+		} `json:"items"`
+	}
+	var all struct {
+		New   int    `json:"new"`
+		Feeds []feed `json:"feeds"`
+	}
+	tool(t, h, "security_notices", `{}`, &all)
+	if all.New != 1 || len(all.Feeds) != 4 {
+		t.Fatalf("all: %+v", all)
+	}
+	// Worst first, then most new: tailscale (crit, 1 new), jenkins.installed (crit), letsencrypt (warn), php.
+	order := []string{all.Feeds[0].Feed, all.Feeds[1].Feed, all.Feeds[2].Feed, all.Feeds[3].Feed}
+	if strings.Join(order, ",") != "tailscale,jenkins.installed,letsencrypt,php" {
+		t.Errorf("order: %v", order)
+	}
+	if f := all.Feeds[0]; len(f.Items) != 2 || !f.Items[0].New || f.Items[1].New || f.New != 1 {
+		t.Errorf("tailscale: %+v", f)
+	}
+	if f := all.Feeds[3]; len(f.Items) != 1 || f.Items[0].Date == nil || f.Items[0].Link == "" {
+		t.Errorf("php: %+v", f)
+	}
+	if f := all.Feeds[1]; len(f.Matches) != 1 {
+		t.Errorf("jenkins.installed: %+v", f)
+	}
+
+	var fresh struct {
+		New   int    `json:"new"`
+		Feeds []feed `json:"feeds"`
+	}
+	tool(t, h, "security_notices", `{"new_only":true}`, &fresh)
+	// php has nothing new and no problem: left out. tailscale keeps only its new item.
+	if len(fresh.Feeds) != 3 || fresh.Feeds[0].Feed != "tailscale" || len(fresh.Feeds[0].Items) != 1 || fresh.Feeds[2].Error == "" {
+		t.Errorf("new_only: %+v", fresh)
+	}
+	tool(t, h, "security_notices", `{"feed":"php"}`, &fresh)
+	if len(fresh.Feeds) != 1 || fresh.Feeds[0].Feed != "php" {
+		t.Errorf("feed: %+v", fresh)
+	}
+	if r := tool(t, h, "security_notices", `{"feed":"nope"}`, nil); !r.Result.IsError {
+		t.Errorf("unknown feed: %+v", r)
 	}
 }
 
