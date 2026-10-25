@@ -9,12 +9,15 @@ security_updates: windows
 windows:
   tailscale_service: Tailscale
   firewall_allow: []     # rule Names (not display names) accepted with RemoteAddress Any
+# Get-WinEvent errors when no event matches, and powershell.exe then exits 1 even
+# with -ErrorAction SilentlyContinue, so a quiet day read as "1 source(s) failed".
+# The try/catch lets that one error through as no output; any other still fails.
 auth_failures:
   warn_per_ip: 100   # one IP this often in 24 h is a brute force: warn
   sources:
     - name: rdp
       cmd: ["powershell.exe", "-NoProfile", "-Command",
-            "Get-WinEvent -FilterHashtable @{LogName='Security';Id=4625;StartTime=(Get-Date).AddDays(-1)} -ErrorAction SilentlyContinue | ForEach-Object { '{0} {1}' -f $_.TimeCreated.ToUniversalTime().ToString('o'), $_.Properties[19].Value }"]
+            "try { Get-WinEvent -FilterHashtable @{LogName='Security';Id=4625;StartTime=(Get-Date).AddDays(-1)} -ErrorAction Stop | ForEach-Object { '{0} {1}' -f $_.TimeCreated.ToUniversalTime().ToString('o'), $_.Properties[19].Value } } catch { if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') { throw } }"]
       pattern: '^(?P<time>\S+) (?P<ip>[0-9a-fA-F.:]+)\s*$'   # "time": also counts the last 4 h
 
 # Successful RDP (type 10) and network (type 3) logons with a source address. One
@@ -24,7 +27,7 @@ logins:
   sources:
     - name: rdp
       cmd: ["powershell.exe", "-NoProfile", "-Command",
-            "Get-WinEvent -FilterHashtable @{LogName='Security';Id=4624;StartTime=(Get-Date).AddDays(-1)} -ErrorAction SilentlyContinue | Where-Object { $_.Properties[8].Value -in 3,10 -and $_.Properties[18].Value -notin '-','','127.0.0.1','::1' } | ForEach-Object { '{0} {1} {2} {3}' -f $_.TimeCreated.ToUniversalTime().ToString('o'), $_.Properties[5].Value, $_.Properties[18].Value, $_.Properties[8].Value }"]
+            "try { Get-WinEvent -FilterHashtable @{LogName='Security';Id=4624;StartTime=(Get-Date).AddDays(-1)} -ErrorAction Stop | Where-Object { $_.Properties[8].Value -in 3,10 -and $_.Properties[18].Value -notin '-','','127.0.0.1','::1' } | ForEach-Object { '{0} {1} {2} {3}' -f $_.TimeCreated.ToUniversalTime().ToString('o'), $_.Properties[5].Value, $_.Properties[18].Value, $_.Properties[8].Value } } catch { if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') { throw } }"]
       pattern: '^(?P<time>\S+) (?P<user>\S+) (?P<ip>[0-9a-fA-F.:]+) \d+\s*$'   # "time": the summary says how long ago
 
 # Enabled local users and members of Administrators / Remote Desktop Users /
