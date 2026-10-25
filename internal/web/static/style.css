@@ -321,7 +321,7 @@ form.nav-user {
   color: var(--text-muted);
 }
 
-/* Summary on the left, the All / Problems only switch on the right. */
+/* Summary on the left, the All / Warnings / Errors switch on the right. */
 .overview-bar {
   display: flex;
   flex-wrap: wrap;

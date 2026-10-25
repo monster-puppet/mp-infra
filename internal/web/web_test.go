@@ -855,7 +855,7 @@ func TestNoticeAccept(t *testing.T) {
 	}
 }
 
-func TestProblemsOnly(t *testing.T) {
+func TestHomeViews(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()
 	for _, h := range []string{"monster-p4", "jenkins", "jenkins-win"} {
@@ -865,36 +865,56 @@ func TestProblemsOnly(t *testing.T) {
 	}
 	e.srv.Store.PutCheck(ctx, store.Check{Host: "serve", ID: "notice.exe-dev", State: eval.Crit, Summary: "1 new notice", Data: `{}`}, now)
 	e.srv.Store.PutCheck(ctx, store.Check{Host: "serve", ID: "tls.example", State: eval.OK, Summary: "valid 80 d", Data: `{}`}, now)
+	e.srv.Store.PutCheck(ctx, store.Check{Host: "serve", ID: "disk.backup", State: eval.Warn, Summary: "85% full", Data: `{}`}, now)
 	e.srv.Store.PutCheck(ctx, store.Check{Host: "serve", ID: "ts.devices", State: eval.OK, Summary: "1 device",
 		Data: `{"devices":[{"name":"studio-mac","os":"macOS","connected":true}]}`}, now)
 
 	all := e.get("/").Body.String()
-	for _, want := range []string{`section-title">Agents<`, `section-title">Clients<`, "Certificates", "Security notices"} {
+	for _, want := range []string{`section-title">Agents<`, `section-title">Clients<`, "Certificates", "Security notices", "85% full"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("all view lacks %q", want)
 		}
 	}
 
-	rec := e.get("/?view=problems")
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/" {
-		t.Fatalf("set view: %d %q", rec.Code, rec.Header().Get("Location"))
+	view := func(v string) string {
+		t.Helper()
+		rec := e.get("/?view=" + v)
+		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/" {
+			t.Fatalf("set view %s: %d %q", v, rec.Code, rec.Header().Get("Location"))
+		}
+		cookie := rec.Result().Cookies()[0]
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.AddCookie(cookie)
+		out := httptest.NewRecorder()
+		e.ui.ServeHTTP(out, req)
+		return out.Body.String()
 	}
-	cookie := rec.Result().Cookies()[0]
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.AddCookie(cookie)
-	out := httptest.NewRecorder()
-	e.ui.ServeHTTP(out, req)
-	h := out.Body.String()
-	if !strings.Contains(h, "Security notices") || !strings.Contains(h, "1 new notice") {
-		t.Error("problems view lacks the crit notice")
+
+	cases := []struct {
+		view       string
+		want, gone []string
+	}{
+		{"warnings", []string{"Security notices", "1 new notice", "85% full"},
+			[]string{`section-title">Agents<`, `section-title">Clients<`, "Certificates", "up 5s"}},
+		{"problems", []string{"1 new notice", "85% full"}, []string{"Certificates"}}, // old cookie value
+		{"errors", []string{"Security notices", "1 new notice"},
+			[]string{`section-title">Agents<`, `section-title">Clients<`, "Certificates", "up 5s", "85% full"}},
 	}
-	for _, gone := range []string{`section-title">Agents<`, `section-title">Clients<`, "Certificates", "up 5s"} {
-		if strings.Contains(h, gone) {
-			t.Errorf("problems view shows %q", gone)
+	for _, c := range cases {
+		h := view(c.view)
+		for _, want := range c.want {
+			if !strings.Contains(h, want) {
+				t.Errorf("%s view lacks %q", c.view, want)
+			}
+		}
+		for _, gone := range c.gone {
+			if strings.Contains(h, gone) {
+				t.Errorf("%s view shows %q", c.view, gone)
+			}
 		}
 	}
 
-	rec = e.get("/?view=all")
+	rec := e.get("/?view=all")
 	if c := rec.Result().Cookies(); len(c) != 1 || c[0].MaxAge >= 0 {
 		t.Errorf("view=all did not clear the cookie: %+v", c)
 	}

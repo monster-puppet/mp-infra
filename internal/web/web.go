@@ -413,7 +413,7 @@ type rowView struct {
 	Checks []checkView
 	Counts map[eval.State]int
 	Wide   bool // a group with many checks spans the whole grid row
-	Hidden int  // ok checks left out in the problems-only view
+	Hidden int  // checks left out by the warnings or errors view
 }
 
 type homeData struct {
@@ -424,31 +424,62 @@ type homeData struct {
 	Map     *mapView
 	Groups  []rowView
 	Empty   bool
-	// Problems is the problems-only view: ok checks, cards left with nothing
-	// to show, and sections left with no cards are hidden.
-	Problems bool
-	Hidden   int // ok checks hidden
+	// View is the home page filter: viewAll, viewWarnings (ok checks hidden)
+	// or viewErrors (only crit and stale). In the filtered views cards left
+	// with nothing to show, and sections left with no cards, are hidden.
+	View   string
+	Hidden int // checks hidden
 }
 
-// viewCookie keeps the home page's all/problems choice. It is a display
-// preference, nothing more.
+// viewCookie keeps the home page's view choice. It is a display preference,
+// nothing more.
 const viewCookie = "mpinfra_view"
 
-// problemsOnly drops the ok checks from rows, and the rows left with nothing
-// that is not ok. It returns the rows kept and the number of checks dropped.
-func problemsOnly(rows []rowView) ([]rowView, int) {
+const (
+	viewAll      = "all"
+	viewWarnings = "warnings"
+	viewErrors   = "errors"
+)
+
+// viewFrom reads the view cookie value. "problems" is the old name of the
+// warnings view.
+func viewFrom(v string) string {
+	switch v {
+	case viewWarnings, "problems":
+		return viewWarnings
+	case viewErrors:
+		return viewErrors
+	}
+	return viewAll
+}
+
+// minSeverity is the lowest state severity a view shows.
+func minSeverity(view string) int {
+	switch view {
+	case viewWarnings:
+		return eval.Warn.Severity()
+	case viewErrors:
+		return eval.Crit.Severity()
+	}
+	return 0
+}
+
+// filterRows drops the checks below severity min from rows, and the rows left
+// with nothing at or above it. It returns the rows kept and the number of
+// checks dropped.
+func filterRows(rows []rowView, min int) ([]rowView, int) {
 	var out []rowView
 	hidden := 0
 	for _, r := range rows {
 		var cs []checkView
 		for _, c := range r.Checks {
-			if c.Effective != eval.OK {
+			if c.Effective.Severity() >= min {
 				cs = append(cs, c)
 			}
 		}
 		r.Hidden = len(r.Checks) - len(cs)
 		hidden += r.Hidden
-		if len(cs) == 0 && r.State == eval.OK {
+		if len(cs) == 0 && r.State.Severity() < min {
 			continue
 		}
 		r.Checks = cs
@@ -602,16 +633,16 @@ func (t *tailnetView) markEndpoints(rows []rowView) {
 	mark(t.Offline)
 }
 
-// problemsOnly keeps the endpoint devices that are not ok, or returns nil when
-// there are none: personal devices carry no state.
-func (t *tailnetView) problemsOnly() *tailnetView {
+// filter keeps the endpoint devices at or above severity min, or returns nil
+// when there are none: personal devices carry no state.
+func (t *tailnetView) filter(min int) *tailnetView {
 	if t == nil {
 		return nil
 	}
 	keep := func(ds []deviceView) []deviceView {
 		var out []deviceView
 		for _, d := range ds {
-			if d.Host != "" && d.State != eval.OK && d.State != "" {
+			if d.Host != "" && d.State != "" && d.State.Severity() >= min {
 				out = append(out, d)
 			}
 		}
@@ -689,8 +720,8 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 	// ?view= sets the preference and redirects, so the page URL (and its
 	// refresh) stays plain "/".
 	if v := r.URL.Query().Get("view"); v != "" {
-		c := &http.Cookie{Name: viewCookie, Value: "problems", Path: "/", MaxAge: 365 * 24 * 3600, HttpOnly: true, SameSite: http.SameSiteLaxMode}
-		if v != "problems" {
+		c := &http.Cookie{Name: viewCookie, Value: viewFrom(v), Path: "/", MaxAge: 365 * 24 * 3600, HttpOnly: true, SameSite: http.SameSiteLaxMode}
+		if c.Value == viewAll {
 			c.Value, c.MaxAge = "", -1
 		}
 		http.SetCookie(rw, c)
@@ -775,13 +806,17 @@ func (w *Web) home(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 	counts := map[eval.State]int{}
-	if c, err := r.Cookie(viewCookie); err == nil && c.Value == "problems" {
-		d.Problems = true
+	d.View = viewAll
+	if c, err := r.Cookie(viewCookie); err == nil {
+		d.View = viewFrom(c.Value)
+	}
+	if d.View != viewAll {
+		min := minSeverity(d.View)
 		var n int
-		d.Hosts, d.Hidden = problemsOnly(d.Hosts)
-		d.Groups, n = problemsOnly(d.Groups)
+		d.Hosts, d.Hidden = filterRows(d.Hosts, min)
+		d.Groups, n = filterRows(d.Groups, min)
 		d.Hidden += n
-		d.Tailnet = d.Tailnet.problemsOnly()
+		d.Tailnet = d.Tailnet.filter(min)
 	}
 	sortRows(d.Groups)
 	// Wide groups first, so the narrow ones after them fill whole rows.
