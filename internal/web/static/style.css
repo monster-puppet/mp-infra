@@ -1415,3 +1415,76 @@ pre.data {
 .chart-hit:hover circle {
   opacity: 1;
 }
+
+/* Tooltips (tip.js). One shared box, themed like the cards: dark glass, cream
+   text, a thin brand-red edge, and an arrow that points at the hovered thing. */
+.tip {
+  --tip-bg: #221c1b;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 10000;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 0.45rem 0.7rem;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #2a2221, var(--tip-bg));
+  border: 1px solid var(--border-hi);
+  border-top: 2px solid var(--primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 0.12s var(--ease-out), transform 0.12s var(--ease-out), visibility 0s linear 0.12s;
+}
+
+.tip.tip-below {
+  border-top: 1px solid var(--border-hi);
+  border-bottom: 2px solid var(--primary);
+  transform: translateY(-4px);
+}
+
+.tip.tip-on {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 0.12s var(--ease-out), transform 0.12s var(--ease-out), visibility 0s;
+}
+
+.tip::after {
+  content: '';
+  position: absolute;
+  left: var(--tip-arrow, 50%);
+  top: 100%;
+  width: 9px;
+  height: 9px;
+  margin: -4px 0 0 -5px;
+  background: var(--tip-bg);
+  border-right: 1px solid var(--border-hi);
+  border-bottom: 1px solid var(--border-hi);
+  transform: rotate(45deg);
+}
+
+.tip.tip-below::after {
+  top: auto;
+  bottom: 100%;
+  margin: 0 0 -4px -5px;
+  background: #2a2221;
+  border: 0;
+  border-left: 1px solid var(--border-hi);
+  border-top: 1px solid var(--border-hi);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tip,
+  .tip.tip-below,
+  .tip.tip-on {
+    transform: none;
+    transition: none;
+  }
+}

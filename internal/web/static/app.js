@@ -62,6 +62,7 @@
             if (open[key(all[i], i)]) all[i].open = true;
           }
           window.scrollTo(x, y);
+          document.dispatchEvent(new Event("mpinfra:swap"));
         }
         if (doc.title) document.title = doc.title;
       })
