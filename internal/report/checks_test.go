@@ -388,6 +388,24 @@ func TestSSHAuthCaptured(t *testing.T) {
 	}
 }
 
+func TestDefenderCaptured(t *testing.T) {
+	// jenkins-win, 2026-10-26: Defender's ML heuristic quarantined the agent and its
+	// scheduled task on 10/25. One-element arrays stay arrays here (-Depth 4).
+	b, err := os.ReadFile(filepath.Join("testdata", "win_defender.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 26, 7, 30, 0, 0, time.UTC)
+	c, err := evalDefender("av.defender.jenkins-win", string(b), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `Defender quarantined the mp-infra agent: Trojan:Win32/Bearfoos.A!ml in C:\ProgramData\mp-infra\mpinfra.exe`
+	if c.State != eval.Crit || c.Summary != want {
+		t.Errorf("%s %q", c.State, c.Summary)
+	}
+}
+
 func TestDefender(t *testing.T) {
 	now := time.Date(2026, 10, 26, 9, 0, 0, 0, time.UTC)
 	status := `"RealTimeProtectionEnabled":%s,"AntivirusSignatureLastUpdated":%q,"IsTamperProtected":true`
