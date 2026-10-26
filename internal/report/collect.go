@@ -243,6 +243,17 @@ func collectors(cfg *config.Agent) []collector {
 			return []Check{fail2banCheck(id, true, jails, banned, bans, "", u)}, nil
 		}})
 	}
+	if cf := cfg.Cloudflared; cf != nil {
+		id := "cloudflared." + cfg.Host
+		// Crit on failure: no metrics means the tunnel is not running.
+		cs = append(cs, collector{id: id, onError: eval.Crit, run: func(ctx context.Context) ([]Check, error) {
+			m, err := fetchCloudflaredMetrics(ctx, cf.Metrics)
+			if err != nil {
+				return nil, err
+			}
+			return []Check{cloudflaredCheck(id, m, cf, time.Now())}, nil
+		}})
+	}
 	if w := cfg.Windows; w != nil {
 		cs = append(cs, windowsCollectors(cfg.Host, w)...)
 	}

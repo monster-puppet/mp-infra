@@ -46,3 +46,8 @@ logins:
 
 accounts: true
 listeners: true
+
+# Cloudflare Tunnel (cloudflared container, --no-autoupdate): version and live
+# connections from its local metrics. min_version follows Cloudflare's upgrade notices.
+cloudflared:
+  min_version: "2026.10.2"

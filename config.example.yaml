@@ -142,16 +142,6 @@ notion:
   database_id: "OPSEC_DATABASE_ID"
   done_property: "Done"
 
-# Cloudflare Tunnels -> tunnel.<name>: health and each connector's cloudflared version.
-# The token needs only Account > Cloudflare Tunnel > Read.
-cloudflare:
-  token_env: MPINFRA_CLOUDFLARE_TOKEN
-  account_id: "CLOUDFLARE_ACCOUNT_ID"
-  tunnels:
-    nas: nas                     # tunnel name -> host row; unlisted tunnels go under serve
-  min_version: "2026.10.2"       # below this is crit (Cloudflare's upgrade notices)
-  # max_age: 2160h               # calendar version older than this warns (default 90 days)
-
 # Vendors' public security feeds -> notice.<name> checks on serve. No credentials.
 # With no feeds listed, the built-in list is read (exe.dev, Tailscale, Jenkins,
 # PHP 8.3, Let's Encrypt incidents, DigitalOcean trust-security posts).

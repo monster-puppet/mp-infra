@@ -165,7 +165,6 @@ see deploy.md).
 | `disk.<host>.<mount>` | report | < 80% / < 90% / more |
 | `p4.licence` | report: `p4 license -u` users and clients | < limit / at limit / — |
 | `snapshot.age.<droplet>` | serve probe: DigitalOcean API, read-only token | < 35 days / < 60 / older |
-| `tunnel.<name>` | serve probe: Cloudflare API (`cfd_tunnel`, token with Tunnel Read only), filed under the host from `cloudflare.tunnels`. cloudflared run with `--no-autoupdate` never updates itself | healthy and every connector current / degraded, or the oldest connector's calendar version (YYYY.M) older than `max_age` (90 days) / down, no connectors, a connector below `min_version`, or a listed tunnel missing |
 
 ### Attack surface (phase 3)
 
@@ -179,6 +178,7 @@ see deploy.md).
 | `raid.<host>` | report: `/proc/mdstat`. crit when a data array is inactive or missing a member; warn when only a `system` array is (Synology md0/md1, DSM's copy on every disk) or while an array rebuilds or resyncs. A scrub is ok. A one-disk array is ok, noted "no redundancy" |
 | `sec.fail2ban.<host>` | report: `fail2ban-client status` / `banned` and the `Ban` lines in `fail2ban.log` (last 24 h, host local time; "Restore Ban" after a restart is not new). ok while fail2ban runs with an sshd jail; warn when it does not run or has no sshd jail. The data also carries `banned_ips` (sorted, at most 1000 and cut short to fit the 16 KiB data limit, then `banned_ips_cut`), `unban` (the agent's `fail2ban.unban`) and `unban_results` (see §1). The network map sums `banned_now` (distinct addresses) over all hosts in the internet bubble, with an "Unban an IP" link to `/unban`; `bans_24h` stays on the check page. A host whose check is not ok gets a shield badge on its internet line |
 | `smart.<host>` | report: `smartctl -H -A -i` per device. crit on a failed self-assessment, an attribute FAILING_NOW, or pending (197) or uncorrectable (198) sectors; warn on reallocated sectors (5) or an unreadable drive. Attributes are matched by number |
+| `cloudflared.<host>` | report: cloudflared's own Prometheus metrics on loopback (`build_info` version, `cloudflared_tunnel_ha_connections`), the configured URL or the first of 127.0.0.1:20241-20245. No credentials. ok when connected and current; warn when the calendar version (YYYY.M) is older than `max_age_days` (90); crit when no metrics answer, there are no tunnel connections, or the version is below `min_version`. cloudflared run with `--no-autoupdate` never updates itself |
 | `ts.devices` | Tailscale API: devices not in the expected list, or not seen for 30 days |
 | `opsec.items` | Notion OpSec checklist (read-only Notion token), count of open items |
 

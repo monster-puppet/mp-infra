@@ -56,7 +56,6 @@ type Server struct {
 	Jenkins    Jenkins      `yaml:"jenkins"`
 	DO         DigitalOcean `yaml:"digitalocean"`
 	Notion     Notion       `yaml:"notion"`
-	Cloudflare Cloudflare   `yaml:"cloudflare"`
 	// Notices reads vendors' public security feeds (see Notices).
 	Notices Notices `yaml:"notices"`
 	Alerts  Alerts  `yaml:"alerts"`
@@ -231,26 +230,6 @@ type Notion struct {
 	DatabaseID   string `yaml:"database_id"`
 	DoneProperty string `yaml:"done_property"` // a checkbox property; open = unchecked
 	APIURL       string `yaml:"api_url"`
-}
-
-// Cloudflare watches the account's Cloudflare Tunnels (tunnel.<name>): their health
-// and the cloudflared version of every connector. cloudflared never updates itself
-// when run with --no-autoupdate (the NAS container), so this is what notices.
-type Cloudflare struct {
-	// TokenEnv names the env var with an API token that has Account > Cloudflare
-	// Tunnel > Read and nothing else.
-	TokenEnv  string `yaml:"token_env"`
-	AccountID string `yaml:"account_id"`
-	// Tunnels files a tunnel's check under a host row (nas: nas). Unlisted tunnels
-	// go under serve; a listed tunnel missing from the account is crit.
-	Tunnels map[string]string `yaml:"tunnels"`
-	// MinVersion: a connector below it is crit (Cloudflare's "upgrade every
-	// cloudflared to X or later" notices). Empty: no minimum.
-	MinVersion string `yaml:"min_version"`
-	// MaxAge: a connector whose calendar version (YYYY.M.x) is older than this
-	// warns. Default 90 days.
-	MaxAge time.Duration `yaml:"max_age"`
-	APIURL string        `yaml:"api_url"`
 }
 
 // Notices turns vendors' public security feeds into notice.<name> checks on serve.
@@ -545,10 +524,6 @@ func (c *Server) ApplyDefaults() {
 	if c.Notion.APIURL == "" {
 		c.Notion.APIURL = "https://api.notion.com"
 	}
-	if c.Cloudflare.APIURL == "" {
-		c.Cloudflare.APIURL = "https://api.cloudflare.com/client/v4"
-	}
-	def(&c.Cloudflare.MaxAge, 90*24*time.Hour)
 	if c.GoogleLogin.SessionTTL == 0 {
 		c.GoogleLogin.SessionTTL = 7 * 24 * time.Hour
 	}
@@ -712,7 +687,8 @@ type Agent struct {
 	RAID            *RAID          `yaml:"raid"`      // raid.<host>: Linux md arrays from /proc/mdstat
 	SMART           *SMART         `yaml:"smart"`     // smart.<host>: drive health from smartctl
 	Fail2ban        *Fail2ban      `yaml:"fail2ban"`  // sec.fail2ban.<host>: running, banned now, bans in 24 h
-	Windows         *WindowsChecks `yaml:"windows"`
+	Cloudflared     *Cloudflared   `yaml:"cloudflared"`
+	Windows        *WindowsChecks `yaml:"windows"`
 
 	// Path is the file this config was loaded from; the agent keeps its unban
 	// results next to it.
@@ -727,6 +703,21 @@ type Fail2ban struct {
 	// the agent does with `<client> unban <ip>`. Off unless set: it is the only
 	// thing the agent changes on its host (docs/spec.md §1).
 	Unban bool `yaml:"unban"`
+}
+
+// Cloudflared reads a local cloudflared's Prometheus metrics (cloudflared.<host>):
+// its version and live tunnel connections. No credentials; loopback only. Run with
+// --no-autoupdate (the NAS container), cloudflared never updates itself, so this is
+// what notices it falling behind.
+type Cloudflared struct {
+	// Metrics is the metrics URL. Empty: try 127.0.0.1:20241-20245, the ports
+	// cloudflared picks from.
+	Metrics string `yaml:"metrics"`
+	// MinVersion: below it is crit (Cloudflare's "upgrade every cloudflared to X
+	// or later" notices). Empty: no minimum.
+	MinVersion string `yaml:"min_version"`
+	// MaxAgeDays: a calendar version (YYYY.M.x) older than this warns. Default 90.
+	MaxAgeDays float64 `yaml:"max_age_days"`
 }
 
 // RAID reads the Linux md arrays (Synology SHR and RAID are md arrays too).
@@ -914,6 +905,22 @@ func LoadAgent(path string) (*Agent, error) {
 		for _, d := range s.Devices {
 			if !strings.HasPrefix(d, "/dev/") {
 				return nil, fmt.Errorf("%s: smart device %q must be a /dev path", path, d)
+			}
+		}
+	}
+	if cf := c.Cloudflared; cf != nil {
+		if cf.MaxAgeDays <= 0 {
+			cf.MaxAgeDays = 90
+		}
+		if cf.Metrics != "" {
+			u, err := url.Parse(cf.Metrics)
+			host := ""
+			if err == nil {
+				host = u.Hostname()
+			}
+			ip, perr := netip.ParseAddr(host)
+			if err != nil || u.Scheme != "http" || (host != "localhost" && (perr != nil || !ip.IsLoopback())) {
+				return nil, fmt.Errorf("%s: cloudflared metrics %q must be an http URL on loopback", path, cf.Metrics)
 			}
 		}
 	}
