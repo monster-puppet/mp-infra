@@ -165,6 +165,7 @@ see deploy.md).
 | `disk.<host>.<mount>` | report | < 80% / < 90% / more |
 | `p4.licence` | report: `p4 license -u` users and clients | < limit / at limit / — |
 | `snapshot.age.<droplet>` | serve probe: DigitalOcean API, read-only token | < 35 days / < 60 / older |
+| `tunnel.<name>` | serve probe: Cloudflare API (`cfd_tunnel`, token with Tunnel Read only), filed under the host from `cloudflare.tunnels`. cloudflared run with `--no-autoupdate` never updates itself | healthy and every connector current / degraded, or the oldest connector's calendar version (YYYY.M) older than `max_age` (90 days) / down, no connectors, a connector below `min_version`, or a listed tunnel missing |
 
 ### Attack surface (phase 3)
 

@@ -1,5 +1,5 @@
 // Package probe runs the server-side checks: reachability, certificates, DNS, the
-// public port scan, the Tailscale, Jenkins, DigitalOcean and Notion APIs, and the
+// public port scan, the Tailscale, Jenkins, DigitalOcean, Notion and Cloudflare APIs, and the
 // vendors' security notices (notices.go). All
 // of them only read, except the monthly break-glass status build (see jenkins.go).
 package probe
@@ -73,7 +73,7 @@ func (p *Prober) Run(ctx context.Context) []Check {
 	probes := []func(context.Context) []Check{
 		p.tcpChecks, p.httpChecks, p.tlsChecks, p.dnsChecks, p.portChecks,
 		p.tailscaleChecks, p.jenkinsChecks, p.snapshotChecks, p.notionChecks,
-		p.noticeChecks,
+		p.noticeChecks, p.tunnelChecks,
 	}
 	var mu sync.Mutex
 	var out []Check

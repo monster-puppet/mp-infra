@@ -56,6 +56,7 @@ type Server struct {
 	Jenkins    Jenkins      `yaml:"jenkins"`
 	DO         DigitalOcean `yaml:"digitalocean"`
 	Notion     Notion       `yaml:"notion"`
+	Cloudflare Cloudflare   `yaml:"cloudflare"`
 	// Notices reads vendors' public security feeds (see Notices).
 	Notices Notices `yaml:"notices"`
 	Alerts  Alerts  `yaml:"alerts"`
@@ -230,6 +231,26 @@ type Notion struct {
 	DatabaseID   string `yaml:"database_id"`
 	DoneProperty string `yaml:"done_property"` // a checkbox property; open = unchecked
 	APIURL       string `yaml:"api_url"`
+}
+
+// Cloudflare watches the account's Cloudflare Tunnels (tunnel.<name>): their health
+// and the cloudflared version of every connector. cloudflared never updates itself
+// when run with --no-autoupdate (the NAS container), so this is what notices.
+type Cloudflare struct {
+	// TokenEnv names the env var with an API token that has Account > Cloudflare
+	// Tunnel > Read and nothing else.
+	TokenEnv  string `yaml:"token_env"`
+	AccountID string `yaml:"account_id"`
+	// Tunnels files a tunnel's check under a host row (nas: nas). Unlisted tunnels
+	// go under serve; a listed tunnel missing from the account is crit.
+	Tunnels map[string]string `yaml:"tunnels"`
+	// MinVersion: a connector below it is crit (Cloudflare's "upgrade every
+	// cloudflared to X or later" notices). Empty: no minimum.
+	MinVersion string `yaml:"min_version"`
+	// MaxAge: a connector whose calendar version (YYYY.M.x) is older than this
+	// warns. Default 90 days.
+	MaxAge time.Duration `yaml:"max_age"`
+	APIURL string        `yaml:"api_url"`
 }
 
 // Notices turns vendors' public security feeds into notice.<name> checks on serve.
@@ -524,6 +545,10 @@ func (c *Server) ApplyDefaults() {
 	if c.Notion.APIURL == "" {
 		c.Notion.APIURL = "https://api.notion.com"
 	}
+	if c.Cloudflare.APIURL == "" {
+		c.Cloudflare.APIURL = "https://api.cloudflare.com/client/v4"
+	}
+	def(&c.Cloudflare.MaxAge, 90*24*time.Hour)
 	if c.GoogleLogin.SessionTTL == 0 {
 		c.GoogleLogin.SessionTTL = 7 * 24 * time.Hour
 	}
