@@ -781,6 +781,7 @@ type AuthSource struct {
 type WindowsChecks struct {
 	TailscaleService string   `yaml:"tailscale_service"` // default "Tailscale"
 	FirewallAllow    []string `yaml:"firewall_allow"`    // rule Names accepted with RemoteAddress Any
+	Defender         *bool    `yaml:"defender"`          // av.defender.<host>: detections, RTP, signature age; default on
 }
 
 // LoadAgent reads and validates an agent config.
@@ -893,6 +894,10 @@ func LoadAgent(path string) (*Agent, error) {
 	}
 	if c.Windows != nil && c.Windows.TailscaleService == "" {
 		c.Windows.TailscaleService = "Tailscale"
+	}
+	if c.Windows != nil && c.Windows.Defender == nil {
+		on := true
+		c.Windows.Defender = &on
 	}
 	return &c, nil
 }

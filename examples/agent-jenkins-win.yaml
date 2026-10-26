@@ -9,6 +9,7 @@ security_updates: windows
 windows:
   tailscale_service: Tailscale
   firewall_allow: []     # rule Names (not display names) accepted with RemoteAddress Any
+  defender: true         # av.defender.jenkins-win: crit on any detection in 7 days (default on)
 # Get-WinEvent errors when no event matches, and powershell.exe then exits 1 even
 # with -ErrorAction SilentlyContinue, so a quiet day read as "1 source(s) failed".
 # The try/catch lets that one error through as no output; any other still fails.

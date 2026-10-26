@@ -668,7 +668,7 @@ var groups = []struct {
 	{"Patches", []string{"os.security_updates.", "pkg.version."}},
 	{"Disks and snapshots", []string{"disk.", "snapshot."}},
 	{"Licences", []string{"p4.licence"}},
-	{"Security", []string{"auth.", "sec.", "endpoint."}},
+	{"Security", []string{"auth.", "sec.", "endpoint.", "av."}},
 	{"Security notices", []string{"notice."}},
 	{"OpSec", []string{"opsec."}},
 	{"Monitor", []string{"serve."}},

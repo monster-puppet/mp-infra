@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -384,5 +385,69 @@ func TestSSHAuthCaptured(t *testing.T) {
 			d["mode"] != "key" || d["password"] != false || d["permit_root_login"] != "without-password" {
 			t.Errorf("%s: %s %q %v", f, c.State, c.Summary, d)
 		}
+	}
+}
+
+func TestDefender(t *testing.T) {
+	now := time.Date(2026, 10, 26, 9, 0, 0, 0, time.UTC)
+	status := `"RealTimeProtectionEnabled":%s,"AntivirusSignatureLastUpdated":%q,"IsTamperProtected":true`
+	fresh := "2026-10-25T21:00:00.0000000Z"
+	for _, tc := range []struct {
+		name, out string
+		state     eval.State
+		want      string
+	}{
+		{"none", `{"Detections":[],` + fmt.Sprintf(status, "true", fresh) + `}`,
+			eval.OK, "Defender on, signatures 12h 0m old, no detections in 7 days"},
+		{"own exe", `{"Detections":{"Time":"2026-10-25T21:24:00.0000000Z","Threat":"Trojan:Win32/Bearfoos.A!ml",` +
+			`"Resources":["file:_C:\\ProgramData\\mp-infra\\mpinfra.exe","taskscheduler:_C:\\Windows\\System32\\Tasks\\mp-infra-report"],` +
+			`"ActionSuccess":true},` + fmt.Sprintf(status, "true", fresh) + `}`,
+			eval.Crit, `Defender quarantined the mp-infra agent: Trojan:Win32/Bearfoos.A!ml in C:\ProgramData\mp-infra\mpinfra.exe`},
+		{"detection", `{"Detections":[{"Time":"2026-10-24T10:00:00Z","Threat":"PUA:Win32/Example",` +
+			`"Resources":"file:_C:\\Users\\builder\\Downloads\\tool.exe","ActionSuccess":false}],` + fmt.Sprintf(status, "true", fresh) + `}`,
+			eval.Crit, `Defender: 1 detection(s) in 7 days, latest PUA:Win32/Example in C:\Users\builder\Downloads\tool.exe (action failed)`},
+		{"rtp off", `{"Detections":null,` + fmt.Sprintf(status, "false", fresh) + `}`,
+			eval.Warn, "Defender real-time protection off"},
+		{"old signatures", `{"Detections":[],` + fmt.Sprintf(status, "true", "2026-10-21T09:00:00Z") + `}`,
+			eval.Warn, "Defender signatures 5d 0h old"},
+		{"no signature date", `{"Detections":[],` + fmt.Sprintf(status, "true", "") + `}`,
+			eval.Warn, "Defender signature age unknown"},
+	} {
+		c, err := evalDefender("av.defender.jenkins-win", tc.out, now)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if c.ID != "av.defender.jenkins-win" || c.State != tc.state || c.Summary != tc.want {
+			t.Errorf("%s: %s %s %q, want %s %q", tc.name, c.ID, c.State, c.Summary, tc.state, tc.want)
+		}
+	}
+	if _, err := evalDefender("av.defender.x", "not json", now); err == nil {
+		t.Error("bad output accepted")
+	}
+
+	// Lists are capped at 50 and strings clipped.
+	var b strings.Builder
+	b.WriteString(`{"Detections":[`)
+	for i := 0; i < 60; i++ {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		fmt.Fprintf(&b, `{"Time":"2026-10-25T00:00:00Z","Threat":%q,"Resources":["file:_C:\\x.exe"],"ActionSuccess":true}`, strings.Repeat("T", 500))
+	}
+	b.WriteString(`],` + fmt.Sprintf(status, "true", fresh) + `}`)
+	c, err := evalDefender("av.defender.x", b.String(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var d struct {
+		Detections []struct {
+			Threat string `json:"threat"`
+		} `json:"detections"`
+	}
+	if err := json.Unmarshal(c.Data, &d); err != nil || len(d.Detections) != 50 || len(d.Detections[0].Threat) != 200 {
+		t.Errorf("caps: %d detections, %v", len(d.Detections), err)
+	}
+	if len(c.Summary) > MaxSummary {
+		t.Errorf("summary too long: %d", len(c.Summary))
 	}
 }

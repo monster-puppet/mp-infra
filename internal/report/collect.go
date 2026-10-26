@@ -244,7 +244,7 @@ func collectors(cfg *config.Agent) []collector {
 		}})
 	}
 	if w := cfg.Windows; w != nil {
-		cs = append(cs, windowsCollectors(w)...)
+		cs = append(cs, windowsCollectors(cfg.Host, w)...)
 	}
 	return cs
 }

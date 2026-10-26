@@ -220,3 +220,17 @@ func TestAdmins(t *testing.T) {
 		t.Error("admin without an admins list")
 	}
 }
+
+func TestLoadAgentDefender(t *testing.T) {
+	c, err := LoadAgent(write(t, "host: jenkins-win\nwindows: {}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Windows.Defender == nil || !*c.Windows.Defender {
+		t.Error("defender not on by default")
+	}
+	c, err = LoadAgent(write(t, "host: jenkins-win\nwindows: {defender: false}\n"))
+	if err != nil || *c.Windows.Defender {
+		t.Errorf("defender: false ignored: %v", err)
+	}
+}

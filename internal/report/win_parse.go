@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/monster-puppet/mp-infra/internal/eval"
 )
@@ -141,6 +142,151 @@ func evalFirewallAny(out string, allow []string) (Check, error) {
 	if len(open) > 0 {
 		c.State = eval.Crit
 		c.Summary = fmt.Sprintf("%d inbound rule(s) allow any remote address, e.g. %s", len(open), open[0].DisplayName)
+	}
+	return c, nil
+}
+
+// defenderScript prints Defender's detections from the last 7 days, newest first,
+// and its protection status. On 2026-10-25 it quarantined the agent itself on
+// jenkins-win, and the server only saw the reports stop.
+const defenderScript = `$ErrorActionPreference = 'Stop'
+$since = (Get-Date).AddDays(-7)
+$names = @{}
+Get-MpThreat | ForEach-Object { $names[[string]$_.ThreatID] = [string]$_.ThreatName }
+$d = @(Get-MpThreatDetection | Where-Object { $_.InitialDetectionTime -ge $since } |
+  Sort-Object InitialDetectionTime -Descending | Select-Object -First 50 | ForEach-Object {
+  [pscustomobject]@{ Time = $_.InitialDetectionTime.ToUniversalTime().ToString('o'); Threat = $names[[string]$_.ThreatID]
+    Resources = @($_.Resources | ForEach-Object { [string]$_ }); ActionSuccess = [bool]$_.ActionSuccess } })
+$s = Get-MpComputerStatus
+$sig = ''
+if ($s.AntivirusSignatureLastUpdated) { $sig = $s.AntivirusSignatureLastUpdated.ToUniversalTime().ToString('o') }
+[pscustomobject]@{ Detections = $d; RealTimeProtectionEnabled = [bool]$s.RealTimeProtectionEnabled
+  AntivirusSignatureLastUpdated = $sig; IsTamperProtected = [bool]$s.IsTamperProtected } | ConvertTo-Json -Compress -Depth 4`
+
+// jsonList decodes a JSON array, a single value or null: ConvertTo-Json in
+// Windows PowerShell can flatten a one-element array.
+type jsonList[T any] []T
+
+func (l *jsonList[T]) UnmarshalJSON(b []byte) error {
+	s := strings.TrimSpace(string(b))
+	if s == "null" {
+		*l = nil
+		return nil
+	}
+	if strings.HasPrefix(s, "[") {
+		return json.Unmarshal(b, (*[]T)(l))
+	}
+	var v T
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	*l = jsonList[T]{v}
+	return nil
+}
+
+type winDetection struct {
+	Time          string           `json:"Time"`
+	Threat        string           `json:"Threat"`
+	Resources     jsonList[string] `json:"Resources"`
+	ActionSuccess bool             `json:"ActionSuccess"`
+}
+
+type winDefender struct {
+	Detections jsonList[winDetection] `json:"Detections"`
+	RTP        bool                   `json:"RealTimeProtectionEnabled"`
+	SigUpdated string                 `json:"AntivirusSignatureLastUpdated"`
+	Tamper     bool                   `json:"IsTamperProtected"`
+}
+
+// defenderSigMaxAge is the signature age at which av.defender warns.
+const defenderSigMaxAge = 3 * 24 * time.Hour
+
+// agentFiles are the last path segments of what Defender removes when it takes
+// the agent: the exe, the copy deploy.sh stages, and the scheduled task.
+var agentFiles = map[string]bool{"mpinfra.exe": true, "mpinfra.staged.exe": true, "mp-infra-report": true}
+
+// detectionPath drops the "file:_" style prefix Defender puts on a resource.
+func detectionPath(r string) string {
+	if i := strings.Index(r, ":_"); i > 0 && i < 20 {
+		return r[i+2:]
+	}
+	return r
+}
+
+func isAgentResource(r string) bool {
+	p := strings.ToLower(detectionPath(r))
+	if i := strings.LastIndexAny(p, `\/`); i >= 0 {
+		p = p[i+1:]
+	}
+	return agentFiles[p]
+}
+
+func evalDefender(id, out string, now time.Time) (Check, error) {
+	var d winDefender
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &d); err != nil {
+		return Check{}, fmt.Errorf("defender output: %w", err)
+	}
+	type detection struct {
+		Time      string   `json:"time"`
+		Threat    string   `json:"threat"`
+		Resources []string `json:"resources"`
+		Removed   bool     `json:"action_success"`
+	}
+	var dets []detection
+	agent := -1
+	for _, x := range d.Detections {
+		if len(dets) == 50 {
+			break
+		}
+		det := detection{Time: Clip(x.Time, 40), Threat: Clip(x.Threat, 200), Removed: x.ActionSuccess}
+		for _, r := range x.Resources {
+			if len(det.Resources) == 50 {
+				break
+			}
+			det.Resources = append(det.Resources, Clip(r, 300))
+			if agent < 0 && isAgentResource(r) {
+				agent = len(dets)
+			}
+		}
+		dets = append(dets, det)
+	}
+	sig, sigErr := time.Parse(time.RFC3339Nano, d.SigUpdated)
+	data := map[string]any{"detections": dets, "rtp": d.RTP, "tamper_protected": d.Tamper}
+	if sigErr == nil {
+		data["signatures_updated"] = sig.UTC()
+	}
+	c := Check{ID: id, State: eval.OK, Data: mustJSON(data)}
+	switch {
+	case len(dets) > 0:
+		c.State = eval.Crit
+		x := dets[0]
+		if agent >= 0 {
+			x = dets[agent]
+		}
+		what := x.Threat
+		if what == "" {
+			what = "unknown threat"
+		}
+		if len(x.Resources) > 0 {
+			what += " in " + detectionPath(x.Resources[0])
+		}
+		if agent >= 0 {
+			c.Summary = "Defender quarantined the mp-infra agent: " + what
+		} else {
+			c.Summary = fmt.Sprintf("Defender: %d detection(s) in 7 days, latest %s", len(dets), what)
+		}
+		if !x.Removed {
+			c.Summary += " (action failed)"
+		}
+		c.Summary = Clip(c.Summary, MaxSummary)
+	case !d.RTP:
+		c.State, c.Summary = eval.Warn, "Defender real-time protection off"
+	case sigErr != nil:
+		c.State, c.Summary = eval.Warn, "Defender signature age unknown"
+	case now.Sub(sig) > defenderSigMaxAge:
+		c.State, c.Summary = eval.Warn, "Defender signatures "+Human(now.Sub(sig))+" old"
+	default:
+		c.Summary = "Defender on, signatures " + Human(now.Sub(sig)) + " old, no detections in 7 days"
 	}
 	return c, nil
 }

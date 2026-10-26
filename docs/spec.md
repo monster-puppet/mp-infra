@@ -129,6 +129,7 @@ are config values, not constants.
 | `ts.key_expiry.<host>` | Tailscale API | expiry disabled / — / expiry enabled or < 14 days |
 | `jenkins.agent.<name>` | Jenkins API | online / — / offline > 5 min |
 | `win.tailscale_service` | jenkins-win report | running + Automatic + restart-on-failure / — / anything else |
+| `report.fresh` | server sweep | reported within `stale_after` / — / `stale`. When `ts.online.<host>` is still ok the summary adds "online on tailnet, agent stopped or removed" (plus "(check Defender)" on `os: windows`); the last `agent_version` is kept in its data. Endpoint hosts never get the hint |
 | `win.breakglass_job` | Jenkins API | last `break-glass-windows-tailscale` run SUCCESS within 35 days / — / failed or older |
 
 `server` runs a monthly `ACTION=status` build of the break-glass job through the Jenkins
@@ -150,6 +151,7 @@ see deploy.md).
 | `ports.public.<host>` | serve probe: TCP connect scan of the host's public IP for a configured port list | open set == expected set / — / any unexpected open port |
 | `fw.rules.<host>` | report: `firewall-cmd --list-all` hash vs. last accepted | same / changed (acknowledge in UI) / — |
 | `win.fw.allow_any` | jenkins-win report: enabled inbound allow rules with RemoteAddress Any | none / — / any |
+| `av.defender.<host>` | Windows report (`windows.defender`, default on): `Get-MpThreatDetection` of the last 7 days with names from `Get-MpThreat`, and `Get-MpComputerStatus` | no detection, real-time protection on, signatures ≤ 3 days old / RTP off, signatures older or of unknown age / any detection in 7 days, "Defender quarantined the mp-infra agent" when a resource is `mpinfra.exe`, `mpinfra.staged.exe` or the `mp-infra-report` task. Lists capped at 50 |
 | `tls.<name>` | serve probe | > 21 days / > 7 / less |
 | `dns.<name>` | serve probe: A record vs. expected | match / — / mismatch |
 | `http.<name>` | serve probe: GET without following redirects. Optional `status` (exact), `location` (prefix of the redirect target), `contains` (text in the first MiB of the body) | all met / — / failed request, wrong status, wrong redirect, or text missing (a parked or wrong site) |
@@ -190,7 +192,7 @@ reported facts, with thresholds under `thresholds.endpoint_*`.
 | id | Facts | ok / warn / crit |
 |---|---|---|
 | `endpoint.bitlocker.<host>` | Shell `System.Volume.BitLockerProtection` of the system drive | on / unknown or encrypting / off, suspended or decrypting |
-| `endpoint.av.<host>` | `root\SecurityCenter2` products (productState), `Get-MpComputerStatus` | an enabled product, up to date / signatures out of date or older than `endpoint_av_sig_days` (3), Defender tamper protection off / no enabled product, or active Defender with real-time protection off |
+| `endpoint.av.<host>` | `root\SecurityCenter2` products (productState), `Get-MpComputerStatus` | an enabled product, up to date / signatures out of date or older than `endpoint_av_sig_days` (3), Defender tamper protection off / no enabled product, active Defender with real-time protection off, or `defender.detections.count` > 0 (optional `{count, names}` for the last 7 days) |
 | `endpoint.firewall.<host>` | `Get-NetFirewallProfile`, SecurityCenter2 firewall products | all profiles on or a third-party firewall / a profile off / — |
 | `endpoint.boot.<host>` | `SecureBoot\State`, `tpmtool getdeviceinformation` | Secure Boot on and TPM 2.0 / otherwise / — |
 | `endpoint.screenlock.<host>` | `InactivityTimeoutSecs` policy, else the user's screensaver with sign-in | lock within `endpoint_screen_lock_secs` (900) / longer or none / — |

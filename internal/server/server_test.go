@@ -298,3 +298,47 @@ func TestTailnetLogins(t *testing.T) {
 		}
 	}
 }
+
+func TestSweepStaleHint(t *testing.T) {
+	s, _, clock := setup(t, config.Host{Name: "win", OS: "windows"}, config.Host{Name: "lin", OS: "rocky"},
+		config.Host{Name: "down"}, config.Host{Name: "pc", Endpoint: true})
+	ctx := context.Background()
+	for _, h := range []string{"win", "lin", "down", "pc"} {
+		p := payload(h)
+		p.AgentVersion = "v1.2.3"
+		if err := s.Ingest(ctx, h, []byte(`{}`), p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.Store.PutCheck(ctx, store.Check{Host: "win", ID: "ts.online.win", State: eval.OK}, t0)
+	s.Store.PutCheck(ctx, store.Check{Host: "lin", ID: "ts.online.lin", State: eval.OK}, t0)
+	s.Store.PutCheck(ctx, store.Check{Host: "down", ID: "ts.online.down", State: eval.Crit}, t0)
+
+	*clock = t0.Add(9 * 24 * time.Hour) // past the endpoint's stale_after too
+	if err := s.Sweep(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for host, want := range map[string]string{
+		"win":  "no report for 9d 0h; online on tailnet, agent stopped or removed (check Defender)",
+		"lin":  "no report for 9d 0h; online on tailnet, agent stopped or removed",
+		"down": "no report for 9d 0h",
+		"pc":   "no report for 9d 0h",
+	} {
+		c, err := s.Store.Check(ctx, host, "report.fresh")
+		if err != nil || c == nil {
+			t.Fatalf("%s: %v %v", host, c, err)
+		}
+		if c.State != eval.Stale || c.Summary != want {
+			t.Errorf("%s: %s %q, want %q", host, c.State, c.Summary, want)
+		}
+		var d map[string]any
+		if json.Unmarshal([]byte(c.Data), &d) != nil || d["agent_version"] != "v1.2.3" {
+			t.Errorf("%s: agent_version lost: %s", host, c.Data)
+		}
+	}
+	// A second sweep keeps the version it stored the first time.
+	s.Sweep(ctx)
+	if c, _ := s.Store.Check(ctx, "win", "report.fresh"); !strings.Contains(c.Data, "v1.2.3") {
+		t.Errorf("second sweep lost the version: %s", c.Data)
+	}
+}

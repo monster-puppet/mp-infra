@@ -502,7 +502,11 @@ func (s *Server) Sweep(ctx context.Context) error {
 		if !last[h.Name].IsZero() {
 			summary = "no report for " + report.Human(now.Sub(last[h.Name]))
 		}
-		t, err := s.Store.PutCheck(ctx, store.Check{Host: h.Name, ID: "report.fresh", State: eval.Stale, Summary: summary}, now)
+		hint, data, err := s.staleContext(ctx, h)
+		if err != nil {
+			return err
+		}
+		t, err := s.Store.PutCheck(ctx, store.Check{Host: h.Name, ID: "report.fresh", State: eval.Stale, Summary: summary + hint, Data: data}, now)
 		if err != nil {
 			return err
 		}
@@ -517,6 +521,39 @@ func (s *Server) Sweep(ctx context.Context) error {
 	}
 	s.Alerter.Transitions(ctx, all)
 	return nil
+}
+
+// staleContext returns the hint appended to a stale report.fresh summary and the
+// data to store with it. When the tailnet probe still sees the host, the machine
+// is up and only the agent is missing: on 2026-10-25 Defender quarantined it on
+// jenkins-win and nothing said why. The previous agent_version is kept so the UI
+// still shows what was running.
+func (s *Server) staleContext(ctx context.Context, h config.Host) (string, string, error) {
+	hint := ""
+	online, err := s.Store.Check(ctx, h.Name, "ts.online."+h.Name)
+	if err != nil {
+		return "", "", err
+	}
+	if online != nil && online.State == eval.OK && !h.Endpoint {
+		hint = "; online on tailnet, agent stopped or removed"
+		if h.OS == "windows" {
+			hint += " (check Defender)"
+		}
+	}
+	data := "{}"
+	prev, err := s.Store.Check(ctx, h.Name, "report.fresh")
+	if err != nil {
+		return "", "", err
+	}
+	if prev != nil {
+		var d struct {
+			AgentVersion string `json:"agent_version"`
+		}
+		if json.Unmarshal([]byte(prev.Data), &d) == nil && d.AgentVersion != "" {
+			data = string(mustJSON(map[string]any{"agent_version": d.AgentVersion}))
+		}
+	}
+	return hint, data, nil
 }
 
 // ProbeOnce runs every probe and stores the results.

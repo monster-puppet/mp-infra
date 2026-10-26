@@ -124,6 +124,13 @@ type defender struct {
 	RTP        bool     `json:"rtp"`
 	Tamper     bool     `json:"tamper"`
 	SigAgeDays *float64 `json:"sig_age_days"`
+	// Detections in the last 7 days, absent from launchers that predate it.
+	Detections *detections `json:"detections"`
+}
+
+type detections struct {
+	Count int      `json:"count"`
+	Names []string `json:"names"`
 }
 
 // endpointRule sets the state of an endpoint.* check from its facts.
@@ -202,6 +209,17 @@ func avState(f endpointFacts, sigDays float64) (eval.State, string) {
 		}
 	}
 	sort.Strings(on)
+	if d := f.Defender; d != nil && d.Detections != nil && d.Detections.Count > 0 {
+		sum := fmt.Sprintf("Defender: %d detection(s) in 7 days", d.Detections.Count)
+		names := d.Detections.Names
+		if len(names) > 3 {
+			names = names[:3]
+		}
+		if len(names) > 0 {
+			sum += ": " + strings.Join(names, ", ")
+		}
+		return eval.Crit, sum
+	}
 	if len(on) == 0 {
 		return eval.Crit, "no antivirus enabled"
 	}
