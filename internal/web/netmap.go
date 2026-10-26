@@ -132,8 +132,6 @@ type mapView struct {
 	// report sec.fail2ban, "" when none report. BannedTitle breaks it down per
 	// host for the tooltip.
 	Banned, BannedTitle string
-	// BanRate is Banned as a share of Failed, "8%", "" without failed logins.
-	BanRate string
 	// Wide layout: networks left and right of a host column.
 	W, H float64
 	// Narrow layout (phones): networks above and below a row of hosts.
@@ -409,18 +407,6 @@ func portTitle(p portChip) string {
 	return t
 }
 
-// banRate is banned as a whole percentage of failed, "<1%" when it rounds to 0.
-func banRate(banned, failed int) string {
-	if failed <= 0 {
-		return ""
-	}
-	pct := (banned*100 + failed/2) / failed
-	if pct == 0 && banned > 0 {
-		return "<1%"
-	}
-	return fmt.Sprintf("%d%%", pct)
-}
-
 // buildMap makes the map from the configured hosts and every current check.
 func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []checkView, tn *tailnetView) *mapView {
 	if len(hosts) == 0 {
@@ -527,7 +513,6 @@ func buildMap(hosts []config.Host, links []config.Link, rows []rowView, all []ch
 	if len(banHosts) > 0 {
 		m.Banned = thousands(banned)
 		m.BannedTitle = "fail2ban\n" + strings.Join(banHosts, "\n")
-		m.BanRate = banRate(banned, failed)
 	}
 	m.Links = hostLinks(m.Nodes, links, all)
 	if tn != nil {
