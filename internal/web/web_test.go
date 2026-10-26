@@ -583,6 +583,17 @@ func TestNetMapFail2ban(t *testing.T) {
 	if m.Banned != "1,050" || !strings.Contains(m.BannedTitle, "a: 1,041 banned now") || strings.Contains(m.BannedTitle, "24 h") {
 		t.Errorf("totals: %q %q", m.Banned, m.BannedTitle)
 	}
+	if m.BanRate != "1050%" {
+		t.Errorf("ban rate: %q", m.BanRate)
+	}
+	for _, tc := range []struct {
+		banned, failed int
+		want           string
+	}{{49, 980, "5%"}, {1, 1000, "<1%"}, {0, 10, "0%"}, {5, 0, ""}} {
+		if got := banRate(tc.banned, tc.failed); got != tc.want {
+			t.Errorf("banRate(%d, %d) = %q, want %q", tc.banned, tc.failed, got, tc.want)
+		}
+	}
 	// The shield appears only where fail2ban is not ok, and colours the line.
 	if m.Nodes[0].Internet.Shield != nil || m.Nodes[1].Internet.Shield != nil {
 		t.Errorf("shield on a healthy host")
@@ -601,14 +612,14 @@ func TestNetMapFail2ban(t *testing.T) {
 
 	e := setup(t)
 	rep := fmt.Sprintf(`{"host":"jenkins","agent_version":"1","collected_at":%q,"checks":[`+
-		`{"id":"auth.failures.jenkins","state":"ok","summary":"5 failed","data":{"total":5}},`+
+		`{"id":"auth.failures.jenkins","state":"ok","summary":"980 failed","data":{"total":980}},`+
 		`{"id":"sec.fail2ban.jenkins","state":"ok","summary":"49 banned","data":{"running":true,"banned_now":49,"bans_24h":7}}]}`,
 		e.clock.Format(time.RFC3339))
 	if rec := e.post("tok-jenkins", rep); rec.Code != http.StatusNoContent {
 		t.Fatalf("post: %d %s", rec.Code, rec.Body)
 	}
 	h := e.get("/").Body.String()
-	if !strings.Contains(h, ">banned now<") || !strings.Contains(h, ">49<") {
+	if !strings.Contains(h, ">banned now<") || !strings.Contains(h, ">49 (5%)<") {
 		t.Errorf("home lacks the banned block")
 	}
 	if strings.Contains(h, "in 24 h<") || strings.Contains(h, "+7") {

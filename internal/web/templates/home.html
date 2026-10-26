@@ -32,7 +32,7 @@
       {{with .Banned}}
       <g class="inet-banned"><title>{{$.Data.Map.BannedTitle}}</title>
       {{template "shieldicon" (badge 82 (add $c 96))}}
-      <text x="111" y="{{add $c 102}}" class="inet-failed inet-failed-small">{{.}}</text>
+      <text x="111" y="{{add $c 102}}" class="inet-failed inet-failed-small">{{.}}{{with $.Data.Map.BanRate}} ({{.}}){{end}}</text>
       <text x="103" y="{{add $c 118}}" class="bubble-note">banned now</text>
       </g>
       <a href="/unban" class="inet-unban"><text x="103" y="{{add $c 144}}" class="bubble-note bubble-link">Unban an IP</text></a>
