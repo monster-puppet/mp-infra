@@ -254,6 +254,17 @@ func collectors(cfg *config.Agent) []collector {
 			return []Check{cloudflaredCheck(id, m, cf, time.Now())}, nil
 		}})
 	}
+	if sc := cfg.CloudSync; sc != nil {
+		id := "cloudsync." + cfg.Host
+		// Crit on failure: an unreadable table means the package is gone or moved.
+		cs = append(cs, collector{id: id, onError: eval.Crit, run: func(ctx context.Context) ([]Check, error) {
+			conns, err := readCloudSync(ctx, sc.DB)
+			if err != nil {
+				return nil, err
+			}
+			return []Check{cloudSyncCheck(id, conns, sc)}, nil
+		}})
+	}
 	if w := cfg.Windows; w != nil {
 		cs = append(cs, windowsCollectors(cfg.Host, w)...)
 	}

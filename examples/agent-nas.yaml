@@ -51,3 +51,8 @@ listeners: true
 # connections from its local metrics. min_version follows Cloudflare's upgrade notices.
 cloudflared:
   min_version: "2026.10.2"
+
+# Synology Cloud Sync: crit when a connection stops (a cloud login breaks and DSM
+# says nothing; the Dropbox link was down 2026-08-19 to 2026-10-28). Reads
+# /volume3/@cloudsync/db/config.sqlite read-only, so the agent must run as root.
+cloudsync: {}

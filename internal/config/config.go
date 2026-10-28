@@ -688,6 +688,7 @@ type Agent struct {
 	SMART           *SMART         `yaml:"smart"`     // smart.<host>: drive health from smartctl
 	Fail2ban        *Fail2ban      `yaml:"fail2ban"`  // sec.fail2ban.<host>: running, banned now, bans in 24 h
 	Cloudflared     *Cloudflared   `yaml:"cloudflared"`
+	CloudSync       *CloudSync     `yaml:"cloudsync"` // cloudsync.<host>: Synology Cloud Sync connections running
 	Windows        *WindowsChecks `yaml:"windows"`
 
 	// Path is the file this config was loaded from; the agent keeps its unban
@@ -718,6 +719,15 @@ type Cloudflared struct {
 	MinVersion string `yaml:"min_version"`
 	// MaxAgeDays: a calendar version (YYYY.M.x) older than this warns. Default 90.
 	MaxAgeDays float64 `yaml:"max_age_days"`
+}
+
+// CloudSync reads Synology Cloud Sync's connection table (read-only; needs root).
+// `cloudsync: {}` takes the defaults.
+type CloudSync struct {
+	// DB is Cloud Sync's config database. Default /volume3/@cloudsync/db/config.sqlite.
+	DB string `yaml:"db"`
+	// Ignore lists connection (task) names not to alert on.
+	Ignore []string `yaml:"ignore"`
 }
 
 // RAID reads the Linux md arrays (Synology SHR and RAID are md arrays too).
@@ -923,6 +933,9 @@ func LoadAgent(path string) (*Agent, error) {
 				return nil, fmt.Errorf("%s: cloudflared metrics %q must be an http URL on loopback", path, cf.Metrics)
 			}
 		}
+	}
+	if sc := c.CloudSync; sc != nil && sc.DB == "" {
+		sc.DB = "/volume3/@cloudsync/db/config.sqlite"
 	}
 	if c.Windows != nil && c.Windows.TailscaleService == "" {
 		c.Windows.TailscaleService = "Tailscale"
