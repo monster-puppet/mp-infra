@@ -575,6 +575,30 @@ func (s *Server) ProbeOnce(ctx context.Context) {
 		}
 	}
 	s.Alerter.Transitions(ctx, all)
+	s.forgetRemovedApps(ctx)
+}
+
+// forgetRemovedApps deletes app.* checks whose app is no longer in the config
+// (renamed or removed), so they don't sit on the dashboard as stale alerts.
+func (s *Server) forgetRemovedApps(ctx context.Context) {
+	keep := map[string]bool{}
+	for _, a := range s.Cfg.Apps {
+		keep["app."+a.Name] = true
+	}
+	checks, err := s.Store.Checks(ctx)
+	if err != nil {
+		log.Printf("forget removed apps: %v", err)
+		return
+	}
+	for _, c := range checks {
+		if c.Host == config.ServeHost && strings.HasPrefix(c.ID, "app.") && !keep[c.ID] {
+			if err := s.Store.DeleteCheck(ctx, c.Host, c.ID); err != nil {
+				log.Printf("forget %s: %v", c.ID, err)
+				continue
+			}
+			log.Printf("forgot %s: no longer in apps:", c.ID)
+		}
+	}
 }
 
 // Deadman pings the heartbeat URL and records the result as serve.self.

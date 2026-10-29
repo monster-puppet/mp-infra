@@ -198,6 +198,31 @@ func TestDeadmanAndProbes(t *testing.T) {
 	}
 }
 
+// A renamed or removed app leaves its old app.* check behind; the next probe
+// round forgets it, and keeps the apps still configured.
+func TestProbeForgetsRemovedApps(t *testing.T) {
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer site.Close()
+	s, _, _ := setup(t, config.Host{Name: "a"})
+	ctx := context.Background()
+	t0 := s.Now()
+	s.Store.PutCheck(ctx, store.Check{Host: config.ServeHost, ID: "app.calendar", State: eval.Crit}, t0)
+	s.Store.Ack(ctx, config.ServeHost, "app.calendar", eval.Crit, t0.Add(time.Hour), "m", "", t0)
+	s.Store.PutCheck(ctx, store.Check{Host: "a", ID: "app.like", State: eval.OK}, t0) // not serve: untouched
+
+	s.Cfg.Apps = []config.AppTarget{{Name: "timeoff", URL: site.URL}}
+	s.ProbeOnce(ctx)
+	if c, _ := s.Store.Check(ctx, config.ServeHost, "app.calendar"); c != nil {
+		t.Errorf("removed app kept: %+v", c)
+	}
+	if c, _ := s.Store.Check(ctx, config.ServeHost, "app.timeoff"); c == nil {
+		t.Error("configured app not stored")
+	}
+	if c, _ := s.Store.Check(ctx, "a", "app.like"); c == nil {
+		t.Error("a host's own check was deleted")
+	}
+}
+
 func TestDaily(t *testing.T) {
 	s, _, _ := setup(t, config.Host{Name: "a"})
 	s.Daily(context.Background())

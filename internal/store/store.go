@@ -422,6 +422,22 @@ func (s *Store) Transitions(ctx context.Context, host, checkID string, limit int
 	return out, rows.Err()
 }
 
+// DeleteCheck forgets a check and its acknowledgement, for a probe target that
+// was removed from the config. Its transitions stay as history.
+func (s *Store) DeleteCheck(ctx context.Context, host, id string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{`DELETE FROM checks WHERE host = ? AND id = ?`, `DELETE FROM acks WHERE host = ? AND check_id = ?`} {
+		if _, err := tx.ExecContext(ctx, q, host, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // PruneReports deletes raw reports received before cutoff.
 func (s *Store) PruneReports(ctx context.Context, cutoff time.Time) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM reports WHERE received_at < ?`, cutoff.Unix())
