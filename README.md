@@ -61,6 +61,29 @@ The one write path: admins (`admins:` in the server config) can unban an IP on
 `/unban`, and hosts whose `agent.yaml` has `fail2ban: {unban: true}` run
 `fail2ban-client unban <ip>` after their next report ([`docs/spec.md`](docs/spec.md) §1).
 
+## Apps
+
+The web apps we run (on exe.dev VMs and elsewhere) are listed under `apps:` in the
+server config and shown on `/apps`, one card each. Each gets an `app.<name>` check:
+
+```yaml
+apps:
+  - {name: invoice-scanner, url: "https://invoice.monster-puppet.com/", vm: mp-inv, health: /healthz}
+  - {name: timelog, url: "https://timelog.monster-puppet.com/", vm: mp-log}
+```
+
+- The front page is fetched without following redirects. Anything below 500 is up, so
+  a redirect to a login page, 401 and 403 are fine.
+- Crit: the request fails, a 5xx, `contains` missing from the page, or exe.dev's
+  "Port 5000 unbound" page (nothing listens on the VM, so the app is not running).
+- Warn: slower than `thresholds.app_slow_ms` (default 3000).
+- The certificate counts too, with the `tls_warn_days` / `tls_crit_days` thresholds.
+- `health` (optional) is a path on the same origin that answers
+  `{"status":"ok"|"warn"|"crit","summary":"..."}`. The app's status raises the check;
+  an unreachable endpoint or one that does not answer that JSON warns.
+
+App checks alert like every other check.
+
 ## Building with Claude Code in the cloud
 
 The repo is set up for Claude Code on the web (claude.ai/code). `CLAUDE.md` pulls in

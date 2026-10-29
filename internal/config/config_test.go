@@ -68,10 +68,36 @@ func TestLoadServerRejects(t *testing.T) {
 		"admins: [local]",
 		"admins: ['100.64.0.1']",
 		"admins: [' marcus@example.com']",
+		// apps: empty, bad or duplicate names, a missing, non-https or host-less url, a health that is not a path
+		"apps: [{url: 'https://a.example/'}]",
+		"apps: [{name: Crm, url: 'https://a.example/'}]",
+		"apps: [{name: a.b, url: 'https://a.example/'}]",
+		"apps: [{name: a, url: 'https://a.example/'}, {name: a, url: 'https://b.example/'}]",
+		"apps: [{name: a}]",
+		"apps: [{name: a, url: 'http://a.example/'}]",
+		"apps: [{name: a, url: 'https:///x'}]",
+		"apps: [{name: a, url: 'https://a.example/', health: healthz}]",
+		"apps: [{name: a, url: 'https://a.example/', health: '//evil.example/x'}]",
 	} {
 		if _, err := LoadServer(write(t, body)); err == nil {
 			t.Errorf("LoadServer(%q) = nil error", body)
 		}
+	}
+}
+
+func TestLoadServerApps(t *testing.T) {
+	c, err := LoadServer(write(t, "apps: [{name: crm, url: 'https://crm.example/', vm: mp-portal, health: /healthz, contains: CRM}, {name: timelog, url: 'https://t.example/'}]"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Apps) != 2 || c.Apps[0] != (AppTarget{Name: "crm", URL: "https://crm.example/", VM: "mp-portal", Health: "/healthz", Contains: "CRM"}) {
+		t.Fatalf("apps: %+v", c.Apps)
+	}
+	if c.Thresholds.AppSlowMS != 3000 {
+		t.Errorf("app_slow_ms default = %d", c.Thresholds.AppSlowMS)
+	}
+	if c, err := LoadServer(write(t, "thresholds: {app_slow_ms: 5000}")); err != nil || c.Thresholds.AppSlowMS != 5000 {
+		t.Errorf("app_slow_ms 5000: %v %+v", err, c)
 	}
 }
 

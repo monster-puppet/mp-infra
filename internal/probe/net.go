@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -118,12 +119,19 @@ func (p *Prober) tlsCheck(ctx context.Context, t config.TLSTarget) Check {
 		return errCheck(config.ServeHost, id, eval.Crit, fmt.Errorf("no certificate"))
 	}
 	leaf := certs[0]
-	left := days(leaf.NotAfter.Sub(p.now()))
-	th := p.cfg.Thresholds
-	return Check{Host: config.ServeHost, ID: id, State: eval.Lower(left, th.TLSWarnDays, th.TLSCritDays),
+	left, state := p.certDays(leaf)
+	return Check{Host: config.ServeHost, ID: id, State: state,
 		Summary: fmt.Sprintf("certificate expires in %.0f days (%s)", left, leaf.NotAfter.UTC().Format("2006-01-02")),
 		Data: map[string]any{"subject": leaf.Subject.CommonName, "issuer": leaf.Issuer.CommonName,
 			"not_after": leaf.NotAfter.UTC().Format(time.RFC3339), "days_left": left, "dns_names": leaf.DNSNames}}
+}
+
+// certDays returns the days left on leaf and the state the TLS thresholds make
+// of them. The tls.* and app.* checks share it.
+func (p *Prober) certDays(leaf *x509.Certificate) (float64, eval.State) {
+	left := days(leaf.NotAfter.Sub(p.now()))
+	th := p.cfg.Thresholds
+	return left, eval.Lower(left, th.TLSWarnDays, th.TLSCritDays)
 }
 
 // resolver is replaced in tests.

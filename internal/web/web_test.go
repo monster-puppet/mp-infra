@@ -930,3 +930,53 @@ func TestTooltipScript(t *testing.T) {
 		t.Errorf("unban page lacks tip.js (%d)", rec.Code)
 	}
 }
+
+func TestAppsPage(t *testing.T) {
+	e := setup(t)
+	e.srv.Cfg.Apps = []config.AppTarget{
+		{Name: "invoice-scanner", URL: "https://invoice.example/", VM: "mp-inv", Health: "/healthz"},
+		{Name: "timelog", URL: "https://timelog.example/", VM: "mp-log"},
+		{Name: "crm", URL: "https://crm.example/"},
+	}
+	ctx := context.Background()
+	e.srv.Store.PutCheck(ctx, store.Check{Host: config.ServeHost, ID: "app.invoice-scanner", State: eval.Warn,
+		Summary: "health: <b>Dropbox</b> upload failing; 200 in 412 ms, cert 61 days",
+		Data:    `{"url":"https://invoice.example/","vm":"mp-inv","status":200,"rtt_ms":412,"cert_days":61}`}, now)
+	e.srv.Store.PutCheck(ctx, store.Check{Host: config.ServeHost, ID: "app.timelog", State: eval.OK,
+		Summary: "302 to /login in 380 ms, cert 70 days", Data: `{"status":302,"rtt_ms":380,"cert_days":70}`}, now)
+
+	rec := e.get("/apps")
+	if rec.Code != 200 {
+		t.Fatal(rec.Code, rec.Body.String())
+	}
+	h := rec.Body.String()
+	for _, want := range []string{
+		"<title>Apps · mp-infra</title>", `href="/apps" class="active"`,
+		`href="https://invoice.example/"`, "mp-inv", "badge-warn", "&lt;b&gt;Dropbox&lt;/b&gt;", "HTTP 200 · 412 ms · cert 61 days · since",
+		`href="/check/serve/app.invoice-scanner"`, "302 to /login", "HTTP 302 · 380 ms · cert 70 days",
+		`href="https://crm.example/"`, "pending",
+	} {
+		if !strings.Contains(h, want) {
+			t.Errorf("/apps lacks %q", want)
+		}
+	}
+	if strings.Contains(h, "<b>Dropbox") {
+		t.Error("summary not escaped")
+	}
+	// Config order, not state order.
+	if i, j, k := strings.Index(h, "invoice.example"), strings.Index(h, "timelog.example"), strings.Index(h, "crm.example"); !(i < j && j < k) {
+		t.Errorf("cards out of config order: %d %d %d", i, j, k)
+	}
+	if strings.Contains(h, "/check/serve/app.crm") {
+		t.Error("pending app links to a check that does not exist")
+	}
+	// The home page lists them under Apps.
+	if home := e.get("/").Body.String(); !strings.Contains(home, "app.timelog") {
+		t.Error("home lacks the app checks")
+	}
+
+	e.srv.Cfg.Apps = nil
+	if h := e.get("/apps").Body.String(); !strings.Contains(h, "No apps configured") {
+		t.Error("no empty state")
+	}
+}

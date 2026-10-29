@@ -115,6 +115,7 @@ func TestServerOwned(t *testing.T) {
 		"jenkins.agent.windows":       true,
 		"win.breakglass_job":          true,
 		"report.fresh":                true,
+		"app.timelog":                 true,
 		"win.tailscale_service":       false,
 		"host.uptime":                 false,
 		"p4.checkpoint":               false,

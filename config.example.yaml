@@ -80,6 +80,7 @@ thresholds:
   endpoint_screen_lock_secs: 900  # no screen lock within this warns
   endpoint_min_build: 26200     # Windows 11 25H2; older builds are out of support: crit
   endpoint_update_age: 1080h    # 45 days without an installed update warns
+  app_slow_ms: 3000             # an app's front page slower than this warns
 
 tls:
   - name: code-review
@@ -109,6 +110,19 @@ http:
 tcp:
   - name: p4
     addr: "TAILNET_IP_OF_MONSTER_P4:1666"
+
+# Our web apps, one app.<name> check each and a card each on /apps. A GET of the
+# front page without following redirects: anything below 500 is up (a redirect to
+# a login page, 401 and 403 included). Crit when it fails, answers 5xx, lacks
+# `contains`, or exe.dev says "Port N unbound" (the app is not running). Slower
+# than app_slow_ms warns. The certificate counts with the tls_* thresholds.
+# `health` (optional) is a path on the same origin that answers
+# {"status":"ok"|"warn"|"crit","summary":"..."}; an unreachable or malformed
+# health endpoint warns.
+apps:
+  - {name: invoice-scanner, url: "https://invoice.monster-puppet.com/", vm: mp-inv, health: /healthz}
+  - {name: timelog, url: "https://timelog.monster-puppet.com/", vm: mp-log}
+  - {name: crm, url: "https://mp-portal.exe.xyz/", vm: mp-portal}
 
 tailscale:
   client_id_env: MPINFRA_TS_CLIENT_ID

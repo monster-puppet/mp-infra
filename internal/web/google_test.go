@@ -103,6 +103,9 @@ func TestGoogleRedirectsWhenSignedOut(t *testing.T) {
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/auth/login?next=%2Fhistory%3Fhost%3Djenkins" {
 		t.Fatalf("got %d %q", rec.Code, rec.Header().Get("Location"))
 	}
+	if rec := e.get("/apps"); rec.Code != http.StatusSeeOther {
+		t.Errorf("/apps signed out: %d, want a redirect to sign-in", rec.Code)
+	}
 	for _, p := range []string{"/healthz", "/api/status.json", "/static/style.css"} {
 		if rec := e.get(p); rec.Code != http.StatusOK {
 			t.Errorf("%s: %d, want open", p, rec.Code)

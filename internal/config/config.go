@@ -52,6 +52,7 @@ type Server struct {
 	DNS        []DNSTarget  `yaml:"dns"`
 	HTTP       []HTTPTarget `yaml:"http"`
 	TCP        []TCPTarget  `yaml:"tcp"`
+	Apps       []AppTarget  `yaml:"apps"` // our web apps: an app.<name> check and a card on /apps each
 	Tailscale  Tailscale    `yaml:"tailscale"`
 	Jenkins    Jenkins      `yaml:"jenkins"`
 	DO         DigitalOcean `yaml:"digitalocean"`
@@ -156,6 +157,10 @@ type Thresholds struct {
 	EndpointScreenLockSecs float64       `yaml:"endpoint_screen_lock_secs"` // a longer (or no) lock timeout warns
 	EndpointMinBuild       int           `yaml:"endpoint_min_build"`        // Windows builds below this are out of support: crit
 	EndpointUpdateAge      time.Duration `yaml:"endpoint_update_age"`       // no update installed for this long warns
+
+	// AppSlowMS: an app whose front page takes longer than this many
+	// milliseconds warns.
+	AppSlowMS int `yaml:"app_slow_ms"`
 }
 
 type TLSTarget struct {
@@ -179,6 +184,40 @@ type HTTPTarget struct {
 	// Location, when set, must be the start of the redirect target (a 3xx's
 	// Location header), e.g. the apex redirecting to www.
 	Location string `yaml:"location"`
+}
+
+// AppTarget is one web app, checked as app.<name>: its front page, its
+// certificate and, when it has one, its health endpoint.
+type AppTarget struct {
+	Name string `yaml:"name"`
+	URL  string `yaml:"url"` // https URL of the front page
+	// VM labels where the app runs, e.g. the exe.dev VM name.
+	VM string `yaml:"vm"`
+	// Health, when set, is a path on the URL's origin that answers
+	// {"status":"ok"|"warn"|"crit","summary":"..."}.
+	Health string `yaml:"health"`
+	// Contains, when set, must appear in the first MiB of the front page's body.
+	Contains string `yaml:"contains"`
+}
+
+func checkApps(apps []AppTarget) error {
+	seen := map[string]bool{}
+	for _, a := range apps {
+		if !versionName.MatchString(a.Name) {
+			return fmt.Errorf("apps: invalid app name %q", a.Name)
+		}
+		if seen[a.Name] {
+			return fmt.Errorf("apps: duplicate app %q", a.Name)
+		}
+		seen[a.Name] = true
+		if u, err := url.Parse(a.URL); err != nil || u.Scheme != "https" || u.Host == "" {
+			return fmt.Errorf("apps: app %s: url must be https", a.Name)
+		}
+		if a.Health != "" && (!strings.HasPrefix(a.Health, "/") || strings.HasPrefix(a.Health, "//")) {
+			return fmt.Errorf("apps: app %s: health must be a path starting with /", a.Name)
+		}
+	}
+	return nil
 }
 
 type TCPTarget struct {
@@ -341,6 +380,9 @@ func LoadServer(path string) (*Server, error) {
 	if err := c.Notices.check(); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+	if err := checkApps(c.Apps); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	seen := map[string]bool{}
 	for _, h := range c.Hosts {
 		if !HostName.MatchString(h.Name) {
@@ -497,6 +539,9 @@ func (c *Server) ApplyDefaults() {
 	def(&t.UpdatesCritAge, 14*24*time.Hour)
 	if t.BruteForceActive <= 0 {
 		t.BruteForceActive = 30
+	}
+	if t.AppSlowMS <= 0 {
+		t.AppSlowMS = 3000
 	}
 	deff(&t.EndpointAVSigDays, 3)
 	deff(&t.EndpointScreenLockSecs, 900)

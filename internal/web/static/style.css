@@ -983,6 +983,12 @@ pre.data {
 .mini-sum { color: var(--text); overflow-wrap: anywhere; }
 .device-more { font-size: 0.8rem; }
 
+/* Apps page: one card per app; the link sits at the foot of the card. */
+.app-card .row-note { overflow-wrap: anywhere; }
+.app-summary { margin-top: 0.75rem; overflow-wrap: anywhere; }
+.app-card .meta { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; }
+.app-more { font-size: 0.8rem; margin-top: auto; padding-top: 0.75rem; }
+
 .os-laptop, .os-phone, .os-device { color: var(--text); }
 
 .offline {

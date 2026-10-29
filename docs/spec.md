@@ -155,6 +155,7 @@ see deploy.md).
 | `tls.<name>` | serve probe | > 21 days / > 7 / less |
 | `dns.<name>` | serve probe: A record vs. expected | match / — / mismatch |
 | `http.<name>` | serve probe: GET without following redirects. Optional `status` (exact), `location` (prefix of the redirect target), `contains` (text in the first MiB of the body) | all met / — / failed request, wrong status, wrong redirect, or text missing (a parked or wrong site) |
+| `app.<name>` | serve probe of a web app (`apps:`, page `/apps`): front page GET without following redirects, its certificate, optional `health` endpoint JSON `{status, summary}` | status < 500 (3xx, 401, 403 count as up), cert > 21 days, health ok / slower than `app_slow_ms` (3000), cert ≤ 21 days, health warn, unreachable or bad health JSON / failed request or bad certificate, 5xx, `contains` missing, exe.dev "Port N unbound", cert ≤ 7 days, health crit |
 
 ### Patches and limits (phase 2)
 

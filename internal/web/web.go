@@ -79,7 +79,7 @@ func New(srv *server.Server, who Whoiser) *Web {
 			return map[string]string{"waiting": "new", "sent": "warn", "done": "ok", "failed": "crit", "expired": "stale"}[state]
 		},
 	}
-	for _, page := range []string{"home", "check", "history", "error", "signin", "host", "unban"} {
+	for _, page := range []string{"home", "check", "history", "error", "signin", "host", "unban", "apps"} {
 		w.pages[page] = template.Must(template.New("layout.html").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", "templates/"+page+".html"))
 	}
 	return w
@@ -164,6 +164,7 @@ func (w *Web) UI() http.Handler {
 	mux.HandleFunc("POST /check/{host}/{id}/unack", w.sameOrigin(w.unack))
 	mux.HandleFunc("POST /check/{host}/{id}/accept", w.sameOrigin(w.accept))
 	mux.HandleFunc("GET /history", w.history)
+	mux.HandleFunc("GET /apps", w.apps)
 	mux.HandleFunc("GET /host/{host}", w.hostPage)
 	mux.HandleFunc("POST /host/{host}", w.sameOrigin(w.saveHost))
 	mux.HandleFunc("GET /unban", w.unbanPage)
@@ -665,6 +666,7 @@ var groups = []struct {
 	{"Public ports", []string{"ports.", "fw.", "win.fw."}},
 	{"Certificates", []string{"tls."}},
 	{"DNS and reachability", []string{"dns.", "http.", "tcp."}},
+	{"Apps", []string{"app."}},
 	{"Patches", []string{"os.security_updates.", "pkg.version."}},
 	{"Disks and snapshots", []string{"disk.", "snapshot."}},
 	{"Licences", []string{"p4.licence"}},
@@ -1026,6 +1028,51 @@ func (w *Web) history(rw http.ResponseWriter, r *http.Request) {
 	}
 	d.Hosts = append(d.Hosts, config.ServeHost)
 	w.render(rw, r, "history", 200, page{Title: "History", Section: "history", Refresh: true, Data: d})
+}
+
+// appView is one card on /apps: a configured app and its app.<name> check, if
+// the probe has stored one yet.
+type appView struct {
+	config.AppTarget
+	Check    *checkView // nil: pending, no probe result yet
+	Href     string     // the check's detail page
+	Status   int
+	RTTMS    int64
+	CertDays *int
+	Since    string // when the state last changed
+}
+
+func (w *Web) apps(rw http.ResponseWriter, r *http.Request) {
+	checks, err := w.srv.Store.Checks(r.Context())
+	if err != nil {
+		w.fail(rw, r, 500, err.Error())
+		return
+	}
+	byID := map[string]store.Check{}
+	for _, c := range checks {
+		if c.Host == config.ServeHost && strings.HasPrefix(c.ID, "app.") {
+			byID[c.ID] = c
+		}
+	}
+	now := w.srv.Now()
+	views := []appView{}
+	for _, a := range w.srv.Cfg.Apps {
+		id := "app." + a.Name
+		v := appView{AppTarget: a, Href: checkURL(config.ServeHost, id)}
+		if c, ok := byID[id]; ok {
+			cv := w.view(c, now)
+			v.Check, v.Since = &cv, ago(now, c.Since)
+			var d struct {
+				Status   int   `json:"status"`
+				RTTMS    int64 `json:"rtt_ms"`
+				CertDays *int  `json:"cert_days"`
+			}
+			json.Unmarshal([]byte(c.Data), &d)
+			v.Status, v.RTTMS, v.CertDays = d.Status, d.RTTMS, d.CertDays
+		}
+		views = append(views, v)
+	}
+	w.render(rw, r, "apps", 200, page{Title: "Apps", Section: "apps", Refresh: true, Data: views})
 }
 
 func (w *Web) status(rw http.ResponseWriter, r *http.Request) {
